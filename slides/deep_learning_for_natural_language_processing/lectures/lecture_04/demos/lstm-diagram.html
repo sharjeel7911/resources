@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LSTM Cell Architecture — Classic Diagram</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #fff;
+    color: #1a1a1a;
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    padding: 30px 20px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; }
+  h1 {
+    font-size: 1.6rem; font-weight: 700; text-align: center;
+    margin-bottom: 6px; color: #111;
+  }
+  .subtitle {
+    text-align: center; font-size: 0.92rem; color: #666;
+    margin-bottom: 24px; max-width: 700px; margin-left: auto; margin-right: auto;
+  }
+  .canvas-wrap {
+    background: #fff; border: 1px solid #ddd; border-radius: 12px;
+    padding: 10px; box-shadow: 0 1px 8px rgba(0,0,0,0.06);
+    overflow-x: auto;
+  }
+  canvas { display: block; margin: 0 auto; }
+
+  .equations {
+    margin-top: 28px; display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+  }
+  .eq-card {
+    background: #f8f8f8; border: 1px solid #e0e0e0; border-radius: 10px;
+    padding: 16px 18px; position: relative; overflow: hidden;
+  }
+  .eq-card::before {
+    content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%;
+  }
+  .eq-card.forget::before { background: #888; }
+  .eq-card.input::before { background: #666; }
+  .eq-card.cell::before { background: #333; }
+  .eq-card.output::before { background: #444; }
+  .eq-card .eq-title {
+    font-size: 0.82rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.8px; margin-bottom: 8px; color: #333;
+  }
+  .eq-card .eq-body { font-size: 1rem; margin-bottom: 6px; }
+  .eq-card .eq-desc { font-size: 0.82rem; color: #777; line-height: 1.5; }
+  .eq-card .katex { font-size: 1.15em; }
+
+  .legend-row {
+    display: flex; gap: 28px; justify-content: center;
+    flex-wrap: wrap; margin-top: 20px; padding: 14px 20px;
+    background: #fafafa; border: 1px solid #eee; border-radius: 8px;
+    font-size: 0.82rem; color: #555;
+  }
+  .legend-row .leg { display: flex; align-items: center; gap: 7px; }
+  .legend-row .leg .dot {
+    width: 14px; height: 14px; border-radius: 3px; border: 1px solid #ccc;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>LSTM: Long Short-Term Memory</h1>
+  <p class="subtitle">The repeating module in an LSTM contains four interacting layers (gates), controlling what information flows through the cell state.</p>
+
+  <div class="canvas-wrap">
+    <canvas id="c"></canvas>
+  </div>
+
+  <div class="legend-row">
+    <div class="leg"><div class="dot" style="background:#e8e8e8"></div> Cell body (A)</div>
+    <div class="leg"><div class="dot" style="background:#d5d5d5"></div> Sigmoid gate (σ)</div>
+    <div class="leg"><div class="dot" style="background:#bbb"></div> Tanh layer</div>
+    <div class="leg"><div class="dot" style="background:transparent; border:2px solid #333"></div> Pointwise operation</div>
+    <div class="leg"><svg width="28" height="10"><line x1="0" y1="5" x2="28" y2="5" stroke="#333" stroke-width="2"/><polygon points="24,2 28,5 24,8" fill="#333"/></svg> Vector flow</div>
+    <div class="leg"><svg width="28" height="10"><circle cx="5" cy="5" r="4" fill="#c8b8e8" stroke="#777"/></svg> Vector state</div>
+  </div>
+
+  <div class="equations">
+    <div class="eq-card forget">
+      <div class="eq-title">1. Forget Gate</div>
+      <div class="eq-body">$$f_t = \sigma\big(W_f \cdot [h_{t-1},\, x_t] + b_f\big)$$</div>
+      <div class="eq-desc">Decides what to <strong>throw away</strong> from the cell state. Outputs 0 (forget) to 1 (keep) for each dimension.</div>
+    </div>
+    <div class="eq-card input">
+      <div class="eq-title">2. Input Gate + Candidate</div>
+      <div class="eq-body">$$i_t = \sigma\big(W_i \cdot [h_{t-1},\, x_t] + b_i\big) \qquad \tilde{C}_t = \tanh\big(W_C \cdot [h_{t-1},\, x_t] + b_C\big)$$</div>
+      <div class="eq-desc">Decides what <strong>new information to store</strong>. The input gate scales the candidate values.</div>
+    </div>
+    <div class="eq-card cell">
+      <div class="eq-title">3. Cell State Update</div>
+      <div class="eq-body">$$C_t = f_t \odot C_{t-1} \;+\; i_t \odot \tilde{C}_t$$</div>
+      <div class="eq-desc">The cell state is updated: <strong>forget old</strong> (multiply by f_t) then <strong>add new</strong> (scaled candidate).</div>
+    </div>
+    <div class="eq-card output">
+      <div class="eq-title">4. Output Gate</div>
+      <div class="eq-body">$$o_t = \sigma\big(W_o \cdot [h_{t-1},\, x_t] + b_o\big) \qquad h_t = o_t \odot \tanh(C_t)$$</div>
+      <div class="eq-desc">Decides what parts of the cell state to <strong>output</strong> as the hidden state.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const dpr = window.devicePixelRatio || 1;
+
+// Layout constants
+const CELL_W = 300;
+const CELL_H = 280;
+const CELL_GAP = 70;
+const CELLS = 3;
+const PAD_X = 60;
+const PAD_TOP = 55;
+const PAD_BOT = 50;
+const TOTAL_W = CELLS * CELL_W + (CELLS - 1) * CELL_GAP + PAD_X * 2;
+const TOTAL_H = CELL_H + PAD_TOP + PAD_BOT + 50;
+
+canvas.width = TOTAL_W * dpr;
+canvas.height = TOTAL_H * dpr;
+canvas.style.width = TOTAL_W + 'px';
+canvas.style.height = TOTAL_H + 'px';
+ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+// Color palette — grayscale
+const COL = {
+  bg: '#fff',
+  cellFill: '#f0eedf',   // slight warm gray, like the image
+  cellStroke: '#b5b5a0',
+  gateSigmoid: '#d5d0c0',
+  gateTanh: '#c8c0b0',
+  line: '#444',
+  lineLight: '#999',
+  text: '#222',
+  textDim: '#777',
+  nodeH: '#d8cce8',  // light purple for h states
+  nodeX: '#e0dcd0',  // warm gray for x inputs
+  op: '#fff',
+  opStroke: '#555',
+};
+
+// ===== Drawing primitives =====
+
+function arrow(x1, y1, x2, y2, opts={}) {
+  const {color=COL.line, width=1.8, headSize=7, dashed=false} = opts;
+  const dx = x2-x1, dy = y2-y1;
+  const len = Math.sqrt(dx*dx+dy*dy);
+  const ux = dx/len, uy = dy/len;
+  // Shorten by headSize
+  const ex = x2 - ux * headSize * 0.5;
+  const ey = y2 - uy * headSize * 0.5;
+  ctx.save();
+  ctx.strokeStyle = color; ctx.lineWidth = width;
+  if (dashed) ctx.setLineDash([5, 4]);
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(ex, ey); ctx.stroke();
+  ctx.setLineDash([]);
+  // Head
+  const angle = Math.atan2(dy, dx);
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - headSize*Math.cos(angle-0.38), y2 - headSize*Math.sin(angle-0.38));
+  ctx.lineTo(x2 - headSize*Math.cos(angle+0.38), y2 - headSize*Math.sin(angle+0.38));
+  ctx.closePath();
+  ctx.fillStyle = color; ctx.fill();
+  ctx.restore();
+}
+
+function line(x1, y1, x2, y2, opts={}) {
+  const {color=COL.line, width=1.8} = opts;
+  ctx.save();
+  ctx.strokeStyle = color; ctx.lineWidth = width;
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  ctx.restore();
+}
+
+function gateCircle(x, y, r, label, type) {
+  ctx.save();
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2);
+  ctx.fillStyle = type === 'sigma' ? COL.gateSigmoid : COL.gateTanh;
+  ctx.fill();
+  ctx.strokeStyle = '#888'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = COL.text;
+  ctx.font = type === 'sigma' ? 'bold 13px "JetBrains Mono"' : 'bold 12px "JetBrains Mono"';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(label, x, y + (type === 'sigma' ? 0 : 0));
+  ctx.restore();
+}
+
+function opCircle(x, y, r, symbol) {
+  ctx.save();
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2);
+  ctx.fillStyle = COL.op; ctx.fill();
+  ctx.strokeStyle = COL.opStroke; ctx.lineWidth = 1.8; ctx.stroke();
+  ctx.fillStyle = COL.text;
+  ctx.font = 'bold 14px "JetBrains Mono"';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(symbol, x, y);
+  ctx.restore();
+}
+
+function stateCircle(x, y, r, label, color) {
+  ctx.save();
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2);
+  ctx.fillStyle = color; ctx.fill();
+  ctx.strokeStyle = '#888'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = COL.text;
+  ctx.font = '600 12px "Inter"';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(label, x, y);
+  ctx.restore();
+}
+
+function labelText(x, y, text, opts={}) {
+  const {size=12, weight='600', color=COL.text, align='center', baseline='middle', font='Inter'} = opts;
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.font = `${weight} ${size}px "${font}"`;
+  ctx.textAlign = align; ctx.textBaseline = baseline;
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
+
+// ===== Draw one LSTM cell =====
+function drawCell(ox, oy, tIdx, expanded) {
+  const w = CELL_W, h = CELL_H;
+
+  // Cell body background
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(ox, oy, w, h, 16);
+  ctx.fillStyle = COL.cellFill;
+  ctx.fill();
+  ctx.strokeStyle = COL.cellStroke;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.restore();
+
+  const ccx = ox + w/2;
+  const ccy = oy + h/2;
+
+  if (!expanded) {
+    // Simple "A" label for collapsed cells
+    ctx.save();
+    ctx.fillStyle = '#777';
+    ctx.font = 'bold 48px "Inter"';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('A', ccx, ccy);
+    ctx.restore();
+    return;
+  }
+
+  // ===== EXPANDED INTERNAL STRUCTURE =====
+  // Classic Olah-style LSTM layout:
+  //
+  //   C_{t-1} ──→ [×] ──────────→ [+] ──────────→ C_t
+  //                 ↑                 ↑         ↓ (copy)
+  //                 |                 |       [tanh]
+  //                 |              [×]i*C̃       ↓
+  //                 |             ↑    ↑       [×] ──→ h_t
+  //               [σ]f         [σ]i [tanh]C̃   ↑
+  //                 ↑            ↑     ↑     [σ]o
+  //                 └────────────┴─────┴───────┘
+  //                       [h_{t-1}, x_t] from below
+
+  const cellY = oy + 40;                   // cell state line Y
+  const gateY = oy + h * 0.68;             // gate circles Y
+  const busY  = oy + h - 25;               // input bus Y
+
+  // Horizontal positions (evenly spaced across cell width)
+  const x1 = ox + w * 0.18;   // forget gate + multiply
+  const x2 = ox + w * 0.40;   // input gate
+  const x3 = ox + w * 0.55;   // candidate tanh
+  const x4 = ox + w * 0.72;   // cell add point
+  const x5 = ox + w * 0.85;   // output gate + output tanh
+
+  // ===== CELL STATE HIGHWAY =====
+  arrow(ox - 8, cellY, ox + w + 8, cellY, {color: COL.line, width: 3});
+
+  // Operators on cell state line
+  opCircle(x1, cellY, 13, '\u00d7');   // forget multiply
+  opCircle(x4, cellY, 13, '+');         // add new info
+
+  // ===== FOUR GATE CIRCLES =====
+  const gr = 18; // gate radius
+  gateCircle(x1, gateY, gr, '\u03c3', 'sigma');     // forget
+  gateCircle(x2, gateY, gr, '\u03c3', 'sigma');     // input
+  gateCircle(x3, gateY, gr, 'tanh', 'tanh');         // candidate
+  gateCircle(x5, gateY, gr, '\u03c3', 'sigma');     // output
+
+  // ===== CONNECTIONS: GATES → CELL STATE =====
+
+  // 1. Forget gate σ → × on cell state (straight up)
+  arrow(x1, gateY - gr, x1, cellY + 14, {color: COL.line, width: 1.8});
+
+  // 2. Input gate × Candidate → + on cell state
+  //    First, i_t and C̃_t meet at a pointwise multiply
+  const imulY = gateY - gr - 30;
+  opCircle((x2 + x3) / 2, imulY, 10, '\u00d7');
+  // input gate → imul
+  arrow(x2, gateY - gr, (x2+x3)/2 - 5, imulY + 10, {color: COL.line, width: 1.5});
+  // candidate → imul
+  arrow(x3, gateY - gr, (x2+x3)/2 + 5, imulY + 10, {color: COL.line, width: 1.5});
+  // imul → + on cell state
+  arrow((x2+x3)/2, imulY - 10, x4, cellY + 14, {color: COL.line, width: 1.8});
+
+  // 3. Cell state → output path
+  //    Copy of C_t goes down to a tanh, then multiplied by o_t
+  const otanhY = cellY + 45;
+  gateCircle(x5, otanhY, 14, 'tanh', 'tanh');
+  // vertical line from cell state down to tanh
+  arrow(x5, cellY + 3, x5, otanhY - 15, {color: COL.line, width: 1.5});
+
+  // output multiply: o_t × tanh(C_t)
+  const omulY = otanhY + 35;
+  opCircle(x5, omulY, 10, '\u00d7');
+  // tanh → omul
+  arrow(x5, otanhY + 15, x5, omulY - 11, {color: COL.line, width: 1.5});
+  // output gate σ → omul (from side)
+  // The output σ is at gateY, omul is above. Draw arc from right side of σ to right side of ×
+  arrow(x5 + gr + 2, gateY, x5 + 13, omulY, {color: COL.line, width: 1.5});
+
+  // omul → up and out to h_t circle: go up to top of cell, then horizontal to center, then up
+  const topExit = oy + 6;
+  line(x5, omulY - 10, x5, topExit, {color: COL.line, width: 2});
+  line(x5, topExit, ccx, topExit, {color: COL.line, width: 2});
+  arrow(ccx, topExit, ccx, oy - 5, {color: COL.line, width: 2});
+
+  // ===== INPUT BUS =====
+  // Horizontal line collecting [h_{t-1}, x_t]
+  ctx.save();
+  ctx.strokeStyle = COL.lineLight;
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.moveTo(ox + 12, busY);
+  ctx.lineTo(ox + w - 12, busY);
+  ctx.stroke();
+  ctx.restore();
+
+  // Taps from bus up to each gate
+  [x1, x2, x3, x5].forEach(gx => {
+    arrow(gx, busY - 2, gx, gateY + gr + 1, {color: COL.lineLight, width: 1.3});
+  });
+
+  // Bus ← x_t from below
+  arrow(ccx, oy + h + 6, ccx, busY + 1, {color: COL.line, width: 2});
+
+  // Bus ← h_{t-1} from left
+  arrow(ox - 6, busY, ox + 10, busY, {color: COL.line, width: 2});
+
+  // ===== LABELS =====
+  labelText(x1, gateY + gr + 14, 'forget', {size: 9, color: COL.textDim});
+  labelText(x2, gateY + gr + 14, 'input', {size: 9, color: COL.textDim});
+  labelText(x3, gateY + gr + 14, 'cand.', {size: 9, color: COL.textDim});
+  labelText(x5, gateY + gr + 14, 'output', {size: 9, color: COL.textDim});
+
+  labelText(x1, cellY - 20, 'erase?', {size: 8, color: '#aaa', font: 'Inter'});
+  labelText(x4, cellY - 20, 'write?', {size: 8, color: '#aaa', font: 'Inter'});
+  labelText(x5 + 20, otanhY, 'read?', {size: 8, color: '#aaa', font: 'Inter', align: 'left'});
+}
+
+// ===== DRAW FULL DIAGRAM =====
+function drawAll() {
+  ctx.clearRect(0, 0, TOTAL_W, TOTAL_H);
+
+  const labels = [
+    { sub: 't\u22121', xLabel: 'x_{t-1}', hOutLabel: 'h_{t-1}' },
+    { sub: 't',       xLabel: 'x_t',     hOutLabel: 'h_t' },
+    { sub: 't+1',     xLabel: 'x_{t+1}', hOutLabel: 'h_{t+1}' },
+  ];
+
+  const oy = PAD_TOP + 20;
+  const cellLineY = oy + 40;   // must match drawCell
+  const busY = oy + CELL_H - 25;
+
+  for (let i = 0; i < CELLS; i++) {
+    const ox = PAD_X + i * (CELL_W + CELL_GAP);
+    const ccx = ox + CELL_W / 2;
+    const expanded = (i === 1); // middle cell is expanded
+
+    drawCell(ox, oy, i, expanded);
+
+    // --- x_t below ---
+    const xCircY = oy + CELL_H + 32;
+    stateCircle(ccx, xCircY, 16, labels[i].xLabel, COL.nodeX);
+    arrow(ccx, xCircY - 16, ccx, oy + CELL_H + 2, {color: COL.line, width: 2});
+    labelText(ccx, xCircY + 28, 'time ' + labels[i].sub, {size: 11, color: COL.textDim, weight: '500'});
+
+    // --- h_t above (output) ---
+    // For expanded cell, the h_t arrow comes from inside (x5 position)
+    // For collapsed cells, it comes from center
+    const hCircY = oy - 26;
+    stateCircle(ccx, hCircY, 16, labels[i].hOutLabel, COL.nodeH);
+    if (!expanded) {
+      arrow(ccx, oy - 2, ccx, hCircY + 16, {color: COL.line, width: 2});
+    }
+    // (expanded cell draws its own h_t arrow from the output multiply)
+
+    // --- Inter-cell connections ---
+    if (i < CELLS - 1) {
+      const nextOx = PAD_X + (i+1) * (CELL_W + CELL_GAP);
+      // Cell state highway between cells
+      arrow(ox + CELL_W + 2, cellLineY, nextOx - 2, cellLineY, {color: COL.line, width: 3});
+      // Hidden state (h) between cells at bus level
+      arrow(ox + CELL_W + 2, busY, nextOx - 2, busY, {color: COL.line, width: 2});
+    }
+
+    // Leading arrows for first cell
+    if (i === 0) {
+      arrow(PAD_X - 45, cellLineY, ox - 2, cellLineY, {color: COL.line, width: 3});
+      arrow(PAD_X - 45, busY, ox - 2, busY, {color: COL.line, width: 2});
+      // Labels on leading arrows
+      labelText(PAD_X - 48, cellLineY, 'C_{t-2}', {size: 10, color: '#999', align: 'right', font: 'JetBrains Mono'});
+      labelText(PAD_X - 48, busY, 'h_{t-2}', {size: 10, color: '#999', align: 'right', font: 'JetBrains Mono'});
+    }
+    // Trailing arrows for last cell
+    if (i === CELLS - 1) {
+      arrow(ox + CELL_W + 2, cellLineY, ox + CELL_W + 50, cellLineY, {color: COL.line, width: 3});
+      arrow(ox + CELL_W + 2, busY, ox + CELL_W + 50, busY, {color: COL.line, width: 2});
+    }
+  }
+
+  // ===== TOP ANNOTATION =====
+  const topAnnotY = PAD_TOP - 5;
+  const midCell = PAD_X + 1 * (CELL_W + CELL_GAP);
+  labelText(midCell + CELL_W / 2, topAnnotY, 'Cell State  (long-term memory highway)', {size: 12, color: '#888', weight: '600', font: 'Inter'});
+  arrow(midCell + CELL_W/2 - 120, topAnnotY + 12, midCell + CELL_W/2 + 120, topAnnotY + 12, {color: '#ccc', width: 1.5, headSize: 5});
+
+  // ===== BOTTOM ANNOTATION =====
+  labelText(TOTAL_W / 2, TOTAL_H - 8, 'Each repeating module "A" contains four interacting layers — three sigmoid gates (σ) and one tanh layer', {size: 11, color: '#aaa', weight: '500', font: 'Inter'});
+}
+
+drawAll();
+
+// Render equations
+function initKatex() {
+  if (typeof renderMathInElement === 'function') {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: '$$', right: '$$', display: true},
+        {left: '$', right: '$', display: false}
+      ],
+      throwOnError: false
+    });
+  } else {
+    setTimeout(initKatex, 100);
+  }
+}
+window.addEventListener('load', initKatex);
+</script>
+</body>
+</html>

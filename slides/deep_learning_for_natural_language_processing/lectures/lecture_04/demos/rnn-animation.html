@@ -1,0 +1,1613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How Recurrent Neural Networks Work</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<style>
+  /* ===== THEME VARIABLES ===== */
+  :root {
+    --bg: #0c0e14;
+    --surface: #13161f;
+    --surface2: #1a1e2a;
+    --border: #2a2f3e;
+    --text: #e2e4ea;
+    --text-dim: #7a8199;
+    --accent: #6c9cff;
+    --accent2: #ff7eb3;
+    --accent3: #7affc1;
+    --accent4: #ffcb6b;
+    --input-color: #5b9aff;
+    --hidden-color: #c084fc;
+    --output-color: #34d399;
+    --weight-color: #fbbf24;
+    --radius: 12px;
+    --card-shadow: 0 2px 16px rgba(0,0,0,0.3);
+    --glow-opacity: 0.25;
+    --node-fill-opacity: 20;
+  }
+
+  [data-theme="light"] {
+    --bg: #f4f6fb;
+    --surface: #ffffff;
+    --surface2: #edf0f7;
+    --border: #d0d5e0;
+    --text: #1a1d2e;
+    --text-dim: #6b7394;
+    --accent: #4a7fe5;
+    --accent2: #e0558a;
+    --accent3: #1fa868;
+    --accent4: #d49800;
+    --input-color: #3b78e7;
+    --hidden-color: #9055d6;
+    --output-color: #1a9e6b;
+    --weight-color: #c88a00;
+    --card-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    --glow-opacity: 0.12;
+    --node-fill-opacity: 18;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    transition: background 0.35s, color 0.35s;
+  }
+
+  .app {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+
+  /* ===== HEADER ===== */
+  header {
+    text-align: center;
+    padding: 24px 0 16px;
+    position: relative;
+  }
+
+  header h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 2rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+
+  header p {
+    color: var(--text-dim);
+    font-size: 0.95rem;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  /* ===== THEME TOGGLE ===== */
+  .theme-toggle {
+    position: absolute;
+    top: 24px;
+    right: 0;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 30px;
+    padding: 6px 14px;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.3s;
+  }
+
+  .theme-toggle:hover {
+    border-color: var(--accent);
+    background: var(--surface);
+  }
+
+  .theme-icon {
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  /* ===== STEP INDICATOR ===== */
+  .step-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    margin: 16px 0;
+  }
+
+  .step-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--border);
+    transition: all 0.3s;
+    cursor: pointer;
+  }
+
+  .step-dot.active {
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    transform: scale(1.3);
+  }
+
+  .step-dot.visited {
+    background: var(--accent);
+    opacity: 0.4;
+  }
+
+  /* ===== CARD ===== */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: var(--card-shadow);
+    transition: background 0.35s, border-color 0.35s, box-shadow 0.35s;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2), var(--accent3));
+  }
+
+  .card-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-title .step-num {
+    background: var(--accent);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 20px;
+  }
+
+  [data-theme="light"] .card-title .step-num { color: #fff; }
+
+  .card-subtitle {
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+  }
+
+  /* ===== CANVAS ===== */
+  .viz-area {
+    background: var(--bg);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    min-height: 380px;
+    position: relative;
+    overflow: hidden;
+    transition: background 0.35s, border-color 0.35s;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* ===== LEGEND ===== */
+  .legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+    padding: 10px 14px;
+    background: var(--surface2);
+    border-radius: 8px;
+    font-size: 0.78rem;
+    transition: background 0.35s;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  /* ===== MATH PANEL ===== */
+  .math-panel { margin-top: 16px; }
+
+  .math-block {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+    line-height: 1.8;
+    overflow-x: auto;
+    transition: background 0.35s, border-color 0.35s;
+  }
+
+  .math-block .label {
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    display: block;
+  }
+
+  .math-block .formula { color: var(--text); }
+  .math-block .val-input { color: var(--input-color); }
+  .math-block .val-hidden { color: var(--hidden-color); }
+  .math-block .val-output { color: var(--output-color); }
+  .math-block .val-weight { color: var(--weight-color); }
+  .math-block .val-result { color: var(--accent3); font-weight: 600; }
+  [data-theme="light"] .math-block .val-result { color: #0d8a4f; font-weight: 700; }
+  .math-block .highlight {
+    background: rgba(108,156,255,0.12);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  /* KaTeX overrides */
+  .math-block .katex { font-size: 1.35em; }
+  .math-block .katex-display { margin: 0.5em 0; }
+  .math-block .katex-display > .katex { text-align: left; }
+
+  /* Light mode: dark default font color for KaTeX */
+  [data-theme="light"] .math-block .katex,
+  [data-theme="light"] .math-block .katex .mord,
+  [data-theme="light"] .math-block .katex .mbin,
+  [data-theme="light"] .math-block .katex .mrel,
+  [data-theme="light"] .math-block .katex .mopen,
+  [data-theme="light"] .math-block .katex .mclose,
+  [data-theme="light"] .math-block .katex .mpunct,
+  [data-theme="light"] .math-block .katex .mop,
+  [data-theme="light"] .math-block .katex .minner,
+  [data-theme="light"] .math-block .katex .mtext {
+    color: #1a1d2e;
+  }
+
+  /* Light mode: remap inline \color{} to darker, high-contrast variants */
+  /* Hidden (purple): #c084fc → #7c3aed */
+  [data-theme="light"] .math-block .katex [style*="color:#c084fc"],
+  [data-theme="light"] .math-block .katex [style*="color: #c084fc"] {
+    color: #7c3aed !important;
+  }
+  /* Input (blue): #5b9aff → #2563eb */
+  [data-theme="light"] .math-block .katex [style*="color:#5b9aff"],
+  [data-theme="light"] .math-block .katex [style*="color: #5b9aff"] {
+    color: #2563eb !important;
+  }
+  /* Weight (gold): #fbbf24 → #b45309 */
+  [data-theme="light"] .math-block .katex [style*="color:#fbbf24"],
+  [data-theme="light"] .math-block .katex [style*="color: #fbbf24"] {
+    color: #b45309 !important;
+  }
+  /* Output / result (green): #34d399 → #047857 */
+  [data-theme="light"] .math-block .katex [style*="color:#34d399"],
+  [data-theme="light"] .math-block .katex [style*="color: #34d399"] {
+    color: #047857 !important;
+  }
+  .math-block .eq-row { margin: 6px 0; }
+  .math-block .eq-label {
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    font-style: italic;
+    margin-left: 8px;
+  }
+  .math-block .eq-comment {
+    display: block;
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    font-style: italic;
+    margin: 4px 0 2px 4px;
+    font-family: 'DM Sans', sans-serif;
+  }
+
+  /* ===== EXPLANATION ===== */
+  .explanation {
+    margin-top: 12px;
+    padding: 14px 16px;
+    background: rgba(108,156,255,0.06);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+    font-size: 0.88rem;
+    line-height: 1.6;
+    color: var(--text);
+    transition: background 0.35s;
+  }
+
+  [data-theme="light"] .explanation {
+    background: rgba(74,127,229,0.07);
+  }
+
+  .explanation strong { color: var(--accent); }
+
+  /* ===== NAVIGATION ===== */
+  .nav-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 20px;
+    gap: 12px;
+  }
+
+  .nav-btn {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 600;
+    padding: 10px 28px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .nav-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
+  .btn-prev {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .btn-prev:hover:not(:disabled) {
+    background: var(--border);
+  }
+
+  .btn-next {
+    background: linear-gradient(135deg, var(--accent), #5080ee);
+    color: #fff;
+  }
+
+  .btn-next:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(108,156,255,0.3);
+  }
+
+  .step-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+  }
+
+  /* ===== RESPONSIVE ===== */
+  @media (max-width: 768px) {
+    .app { padding: 12px; }
+    header h1 { font-size: 1.4rem; }
+    .card { padding: 16px; }
+    .math-block { font-size: 0.72rem; padding: 12px; }
+    .nav-btn { padding: 8px 16px; font-size: 0.82rem; }
+    .theme-toggle { padding: 4px 10px; font-size: 0.75rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header>
+    <h1>How Recurrent Neural Networks Work</h1>
+    <p>An interactive step-by-step walkthrough of forward propagation through a small RNN — with every computation shown</p>
+    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">
+      <span class="theme-icon" id="themeIcon">&#9789;</span>
+      <span id="themeLabel">Light</span>
+    </button>
+  </header>
+
+  <div class="step-indicator" id="stepIndicator"></div>
+
+  <div class="main-content">
+    <div class="card">
+      <div class="card-title">
+        <span class="step-num" id="stepNum">1 / 14</span>
+        <span id="stepTitle">The Architecture</span>
+      </div>
+      <div class="card-subtitle" id="stepSubtitle">Understanding the building blocks of an RNN</div>
+
+      <div class="viz-area">
+        <canvas id="canvas"></canvas>
+      </div>
+
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--input-color)"></div> Input x<sub>t</sub></div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--hidden-color)"></div> Hidden h<sub>t</sub></div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--output-color)"></div> Output y&#770;<sub>t</sub></div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--weight-color)"></div> Weights</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--accent2)"></div> Active flow</div>
+      </div>
+
+      <div class="math-panel" id="mathPanel"></div>
+      <div class="explanation" id="explanation"></div>
+    </div>
+  </div>
+
+  <div class="nav-bar">
+    <button class="nav-btn btn-prev" id="btnPrev" onclick="prevStep()">&#8592; Previous</button>
+    <span class="step-label" id="navLabel">Step 1 of 14</span>
+    <button class="nav-btn btn-next" id="btnNext" onclick="nextStep()">Next &#8594;</button>
+  </div>
+</div>
+
+<script>
+// ===== THEME ======
+function getThemeColors() {
+  const cs = getComputedStyle(document.documentElement);
+  return {
+    input:   cs.getPropertyValue('--input-color').trim(),
+    hidden:  cs.getPropertyValue('--hidden-color').trim(),
+    output:  cs.getPropertyValue('--output-color').trim(),
+    weight:  cs.getPropertyValue('--weight-color').trim(),
+    bg:      cs.getPropertyValue('--bg').trim(),
+    surface: cs.getPropertyValue('--surface').trim(),
+    border:  cs.getPropertyValue('--border').trim(),
+    text:    cs.getPropertyValue('--text').trim(),
+    dim:     cs.getPropertyValue('--text-dim').trim(),
+    accent:  cs.getPropertyValue('--accent').trim(),
+    accent2: cs.getPropertyValue('--accent2').trim(),
+    accent3: cs.getPropertyValue('--accent3').trim(),
+  };
+}
+
+let COLORS = getThemeColors();
+let isLight = false;
+
+function toggleTheme() {
+  isLight = !isLight;
+  document.documentElement.setAttribute('data-theme', isLight ? 'light' : '');
+  document.getElementById('themeIcon').innerHTML = isLight ? '&#9788;' : '&#9789;';
+  document.getElementById('themeLabel').textContent = isLight ? 'Dark' : 'Light';
+  // Wait for CSS transition to apply
+  requestAnimationFrame(() => {
+    COLORS = getThemeColors();
+    draw();
+  });
+}
+
+// ===== RNN PARAMETERS =====
+// Input size: 2, Hidden size: 2, Output size: 2
+// Sequence length: 3 time steps
+const Wxh = [[0.5, -0.3], [0.2, 0.7]];   // input->hidden (2x2)
+const Whh = [[0.1, -0.5], [0.4, 0.2]];    // hidden->hidden (2x2)
+const Why = [[0.6, -0.2], [0.3, 0.8]];    // hidden->output (2x2)
+const bh  = [0.0, 0.0];
+const by  = [0.0, 0.0];
+
+// Input sequence (3 time steps)
+const X = [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]];
+const h_init = [0.0, 0.0];
+
+// ===== MATH HELPERS =====
+function tanh(x) { return Math.tanh(x); }
+function softmax(arr) {
+  const max = Math.max(...arr);
+  const exps = arr.map(v => Math.exp(v - max));
+  const sum = exps.reduce((a, b) => a + b, 0);
+  return exps.map(v => v / sum);
+}
+function matVecMul(M, v) {
+  return M.map(row => row.reduce((s, w, j) => s + w * v[j], 0));
+}
+function vecAdd(a, b) { return a.map((v, i) => v + b[i]); }
+function fmt(v, d=4) { return typeof v === 'number' ? v.toFixed(d) : v; }
+function fmtVec(v, d=4) { return '[' + v.map(x => fmt(x, d)).join(', ') + ']'; }
+function fmtMat(M, d=1) { return '[' + M.map(r => fmtVec(r, d)).join(', ') + ']'; }
+
+// ===== FORWARD PASS (computed once, verified) =====
+const h = [h_init];
+const z_h = [];
+const z_y = [];
+const y_hat = [];
+const Wxh_x = [];
+const Whh_h = [];
+
+for (let t = 0; t < 3; t++) {
+  const wx = matVecMul(Wxh, X[t]);
+  const wh = matVecMul(Whh, h[t]);
+  Wxh_x.push(wx);
+  Whh_h.push(wh);
+  const z = vecAdd(vecAdd(wx, wh), bh);
+  z_h.push(z);
+  const ht = z.map(tanh);
+  h.push(ht);
+  const zy = vecAdd(matVecMul(Why, ht), by);
+  z_y.push(zy);
+  y_hat.push(softmax(zy));
+}
+
+// Verification log (open console to confirm)
+console.log('=== RNN Forward Pass Verification ===');
+for (let t = 0; t < 3; t++) {
+  console.log(`t=${t}: Wxh*x=${fmtVec(Wxh_x[t])}, Whh*h=${fmtVec(Whh_h[t])}, z_h=${fmtVec(z_h[t])}, h=${fmtVec(h[t+1])}, z_y=${fmtVec(z_y[t])}, y_hat=${fmtVec(y_hat[t])}`);
+}
+
+// Helper: show detailed mat-vec multiplication steps
+function matVecDetail(M, v, Mname, vname) {
+  const r0 = `${M[0][0]}*${fmt(v[0],1)} + (${M[0][1]})*${fmt(v[1],1)}`;
+  const r1 = `${M[1][0]}*${fmt(v[0],1)} + ${M[1][1]}*${fmt(v[1],1)}`;
+  return `[${r0}, ${r1}]`;
+}
+
+// ===== STEP DEFINITIONS =====
+const steps = [
+  {
+    title: "The RNN Architecture",
+    subtitle: "Understanding the building blocks",
+    draw: "architecture",
+    math: `<span class="label">RNN Core Equations</span>
+<div class="eq-row">
+<span class="eq-comment">Hidden state: mix new input with memory from the previous step, then squash</span>
+$$\\color{#c084fc}{h_t} = \\tanh\\!\\Big(\\color{#fbbf24}{W_{xh}} \\cdot \\color{#5b9aff}{x_t} \\;+\\; \\color{#fbbf24}{W_{hh}} \\cdot \\color{#c084fc}{h_{t-1}} \\;+\\; \\color{#fbbf24}{b_h}\\Big)$$
+</div>
+<div class="eq-row">
+<span class="eq-comment">Output: project the hidden state and turn it into a probability distribution</span>
+$$\\color{#34d399}{\\hat{y}_t} = \\mathrm{softmax}\\!\\Big(\\color{#fbbf24}{W_{hy}} \\cdot \\color{#c084fc}{h_t} \\;+\\; \\color{#fbbf24}{b_y}\\Big)$$
+</div>`,
+    explanation: `An <strong>RNN</strong> processes sequences one element at a time. At each time step it takes an <strong>input x_t</strong> (the current word) and the <strong>previous hidden state h_{t-1}</strong> (memory so far), combines them with learned weights, and produces a <strong>new hidden state h_t</strong> (updated memory) and an <strong>output y&#770;_t</strong> (prediction). The hidden state is the network's "memory" &mdash; it carries information from all previous time steps.`
+  },
+  {
+    title: "Network Parameters",
+    subtitle: "The weights and biases of our small RNN",
+    draw: "params",
+    math: `<span class="label">Weight Matrices &amp; Biases</span>
+<div class="eq-row">
+<span class="eq-comment">These matrices are the learnable "knobs" the network tunes during training</span>
+$$\\color{#fbbf24}{W_{xh}} \\;\\text{(input} \\to \\text{hidden)} = ${fmtMat(Wxh)}$$
+$$\\color{#fbbf24}{W_{hh}} \\;\\text{(hidden} \\to \\text{hidden)} = ${fmtMat(Whh)}$$
+$$\\color{#fbbf24}{W_{hy}} \\;\\text{(hidden} \\to \\text{output)} = ${fmtMat(Why)}$$
+$$\\color{#fbbf24}{b_h} = ${fmtVec(bh, 1)} \\qquad \\color{#fbbf24}{b_y} = ${fmtVec(by, 1)}$$
+</div>`,
+    explanation: `Our tiny RNN has <strong>2 input neurons</strong>, <strong>2 hidden neurons</strong>, and <strong>2 output neurons</strong>. Think of <strong>W_xh</strong> as "how much does each input feature influence each hidden neuron?", <strong>W_hh</strong> as "how much does yesterday's memory influence today's?" (the recurrent connection!), and <strong>W_hy</strong> as "how do we read the hidden state to make a prediction?". In a real network these are learned via backpropagation through time (BPTT).`
+  },
+  {
+    title: "Input Sequence & Initial State",
+    subtitle: "What we feed into the network",
+    draw: "inputs",
+    math: `<span class="label">Input Sequence (3 time steps)</span>
+<div class="eq-row">
+<span class="eq-comment">Each word is represented as a vector &mdash; here we use simple one-hot / combined encodings</span>
+$$\\color{#5b9aff}{x_0} = ${fmtVec(X[0],1)} \\quad \\text{(word: "I" &mdash; one-hot)}$$
+$$\\color{#5b9aff}{x_1} = ${fmtVec(X[1],1)} \\quad \\text{(word: "love" &mdash; one-hot)}$$
+$$\\color{#5b9aff}{x_2} = ${fmtVec(X[2],1)} \\quad \\text{(word: "NLP" &mdash; both features active)}$$
+$$\\color{#c084fc}{h_{-1}} = ${fmtVec(h_init,1)} \\quad \\text{(blank memory &mdash; we start from nothing)}$$
+</div>`,
+    explanation: `We'll process a sequence of <strong>3 word vectors</strong>. The initial hidden state <strong>h_{-1}</strong> is all zeros &mdash; the network starts with a blank slate, no prior memory. Watch how each word changes the hidden state as we step through time.`
+  },
+
+  // ===== TIME STEP 0 =====
+  {
+    title: "Time Step 0 &mdash; Input &times; Weights",
+    subtitle: "Computing the two matrix-vector products",
+    draw: "t0_input",
+    math: `<span class="label">Step 1: Multiply inputs by weights</span>
+<div class="eq-row">
+<span class="eq-comment">How much does the current word "I" activate each hidden neuron?</span>
+$$\\color{#fbbf24}{W_{xh}} \\cdot \\color{#5b9aff}{x_0} = ${fmtMat(Wxh)} \\cdot ${fmtVec(X[0],1)} = \\color{#34d399}{${fmtVec(Wxh_x[0])}}$$
+</div>
+<div class="eq-row">
+<span class="eq-comment">What does the previous memory contribute? (Nothing yet &mdash; it's all zeros!)</span>
+$$\\color{#fbbf24}{W_{hh}} \\cdot \\color{#c084fc}{h_{-1}} = ${fmtMat(Whh)} \\cdot ${fmtVec(h[0],1)} = \\color{#34d399}{${fmtVec(Whh_h[0])}}$$
+</div>`,
+    explanation: `At <strong>t=0</strong>, we multiply the input x_0 by W_xh and the previous hidden state h_{-1} by W_hh. Since h_{-1} is all zeros, the recurrent term contributes nothing yet &mdash; the network has no prior memory. The input [1,0] effectively selects the first column of W_xh.`
+  },
+  {
+    title: "Time Step 0 &mdash; Hidden State",
+    subtitle: "Applying tanh activation to get h_0",
+    draw: "t0_hidden",
+    math: `<span class="label">Step 2: Sum and apply tanh activation</span>
+<div class="eq-row">
+<span class="eq-comment">Add the two products together, plus the bias &mdash; this is the raw hidden signal</span>
+$$\\color{#c084fc}{z_0} = \\color{#fbbf24}{W_{xh}} \\cdot \\color{#5b9aff}{x_0} + \\color{#fbbf24}{W_{hh}} \\cdot \\color{#c084fc}{h_{-1}} + \\color{#fbbf24}{b_h} = ${fmtVec(z_h[0])}$$
+</div>
+<div class="eq-row">
+<span class="eq-comment">Squash through tanh to keep values between -1 and +1 (prevents explosion)</span>
+$$\\color{#c084fc}{h_0} = \\tanh(\\color{#c084fc}{z_0}) = \\big[\\tanh(${fmt(z_h[0][0])}),\\; \\tanh(${fmt(z_h[0][1])})\\big] = \\color{#34d399}{${fmtVec(h[1])}}$$
+</div>`,
+    explanation: `We add both products plus the bias, then squash through <strong>tanh</strong> (outputs between -1 and +1). This is the new hidden state <strong>h_0</strong> &mdash; it's what the network "remembers" after seeing the first word "I". The tanh acts as a valve, preventing values from exploding.`
+  },
+  {
+    title: "Time Step 0 &mdash; Output",
+    subtitle: "Computing the prediction from h_0",
+    draw: "t0_output",
+    math: `<span class="label">Step 3: Compute output via softmax</span>
+<div class="eq-row">
+<span class="eq-comment">Project the hidden state to output space &mdash; raw scores (logits)</span>
+$$\\color{#34d399}{z_{y0}} = \\color{#fbbf24}{W_{hy}} \\cdot \\color{#c084fc}{h_0} + \\color{#fbbf24}{b_y} = ${fmtVec(z_y[0])}$$
+</div>
+<div class="eq-row">
+<span class="eq-comment">Turn raw scores into probabilities that sum to 1</span>
+$$\\color{#34d399}{\\hat{y}_0} = \\mathrm{softmax}(${fmtVec(z_y[0])}) = \\color{#34d399}{${fmtVec(y_hat[0])}}$$
+</div>`,
+    explanation: `The hidden state is projected through <strong>W_hy</strong> to produce logits (raw scores), then <strong>softmax</strong> converts them into probabilities that sum to 1. The output is the network's best guess at time step 0 after seeing only the word "I".`
+  },
+
+  // ===== TIME STEP 1 =====
+  {
+    title: "Time Step 1 &mdash; Input &times; Weights",
+    subtitle: "Now h_0 feeds back in as recurrent input!",
+    draw: "t1_input",
+    math: `<span class="label">Step 1: Multiply inputs &mdash; now with memory!</span>
+<div class="eq-row">
+<span class="eq-comment">How does the new word "love" activate the hidden neurons?</span>
+$$\\color{#fbbf24}{W_{xh}} \\cdot \\color{#5b9aff}{x_1} = ${fmtMat(Wxh)} \\cdot ${fmtVec(X[1],1)} = \\color{#34d399}{${fmtVec(Wxh_x[1])}}$$
+</div>
+<div class="eq-row">
+<span class="eq-comment">This time the memory is NOT zero &mdash; h_0 carries info about "I"!</span>
+$$\\color{#fbbf24}{W_{hh}} \\cdot \\color{#c084fc}{h_0} = ${fmtMat(Whh)} \\cdot ${fmtVec(h[1])} = \\color{#34d399}{${fmtVec(Whh_h[1])}}$$
+</div>`,
+    explanation: `This is where the <strong>"recurrent" magic</strong> happens! Unlike t=0, the hidden state h_0 is no longer zero &mdash; it carries information about the word "I". The term <strong>W_hh &middot; h_0</strong> now contributes real values, allowing the network to combine past context ("I") with the new word ("love").`
+  },
+  {
+    title: "Time Step 1 &mdash; Hidden State",
+    subtitle: "h_1 now encodes info from BOTH words",
+    draw: "t1_hidden",
+    math: `<span class="label">Step 2: Combine and activate</span>
+<div class="eq-row">
+<span class="eq-comment">Merge the new word signal with the memory of "I"</span>
+$$\\color{#c084fc}{z_1} = ${fmtVec(Wxh_x[1])} + ${fmtVec(Whh_h[1])} + ${fmtVec(bh,1)} = ${fmtVec(z_h[1])}$$
+</div>
+<div class="eq-row">
+<span class="eq-comment">Squash &mdash; h_1 now "remembers" both "I" and "love"</span>
+$$\\color{#c084fc}{h_1} = \\tanh(${fmtVec(z_h[1])}) = \\color{#34d399}{${fmtVec(h[2])}}$$
+</div>`,
+    explanation: `The new hidden state <strong>h_1</strong> now encodes information from <strong>both</strong> "I" and "love". Notice the values are different from h_0 &mdash; the recurrent connection has mixed in the prior context. This is how RNNs maintain a running summary of the sequence seen so far.`
+  },
+  {
+    title: "Time Step 1 &mdash; Output",
+    subtitle: "Prediction at t=1",
+    draw: "t1_output",
+    math: `<span class="label">Step 3: Output prediction</span>
+<div class="eq-row">
+<span class="eq-comment">Read h_1 to make a prediction &mdash; now informed by "I" + "love"</span>
+$$\\color{#34d399}{z_{y1}} = \\color{#fbbf24}{W_{hy}} \\cdot \\color{#c084fc}{h_1} + \\color{#fbbf24}{b_y} = ${fmtVec(z_y[1])}$$
+$$\\color{#34d399}{\\hat{y}_1} = \\mathrm{softmax}(${fmtVec(z_y[1])}) = \\color{#34d399}{${fmtVec(y_hat[1])}}$$
+</div>`,
+    explanation: `The output at t=1 is computed the same way, but from the updated hidden state h_1 which now knows about both words. Compare the predictions: at t=0 we got ${fmtVec(y_hat[0])}, now we get ${fmtVec(y_hat[1])} &mdash; the predictions differ because the memory has evolved.`
+  },
+
+  // ===== TIME STEP 2 =====
+  {
+    title: "Time Step 2 &mdash; Input &times; Weights",
+    subtitle: "Final time step with accumulated context",
+    draw: "t2_input",
+    math: `<span class="label">Step 1: Final input with full sequence context</span>
+<div class="eq-row">
+<span class="eq-comment">The final word "NLP" activates both input features simultaneously</span>
+$$\\color{#fbbf24}{W_{xh}} \\cdot \\color{#5b9aff}{x_2} = ${fmtMat(Wxh)} \\cdot ${fmtVec(X[2],1)} = \\color{#34d399}{${fmtVec(Wxh_x[2])}}$$
+</div>
+<div class="eq-row">
+<span class="eq-comment">h_1 brings the full history: memory of "I" + "love"</span>
+$$\\color{#fbbf24}{W_{hh}} \\cdot \\color{#c084fc}{h_1} = ${fmtMat(Whh)} \\cdot ${fmtVec(h[2])} = \\color{#34d399}{${fmtVec(Whh_h[2])}}$$
+</div>`,
+    explanation: `At the final time step, <strong>h_1 carries compressed information from "I" and "love"</strong>. The recurrent term W_hh &middot; h_1 brings this accumulated context into the computation. The network is now processing "NLP" while remembering everything it has seen before.`
+  },
+  {
+    title: "Time Step 2 &mdash; Hidden State",
+    subtitle: "h_2 encodes the entire sentence",
+    draw: "t2_hidden",
+    math: `<span class="label">Step 2: Final hidden state</span>
+<div class="eq-row">
+<span class="eq-comment">Combine: "NLP" signal + memory of "I love"</span>
+$$\\color{#c084fc}{z_2} = ${fmtVec(Wxh_x[2])} + ${fmtVec(Whh_h[2])} + ${fmtVec(bh,1)} = ${fmtVec(z_h[2])}$$
+</div>
+<div class="eq-row">
+<span class="eq-comment">h_2 is the final memory &mdash; a compressed summary of the entire sentence "I love NLP"</span>
+$$\\color{#c084fc}{h_2} = \\tanh(${fmtVec(z_h[2])}) = \\color{#34d399}{${fmtVec(h[3])}}$$
+</div>`,
+    explanation: `<strong>h_2</strong> is the final hidden state &mdash; a compressed representation of the <strong>entire sentence "I love NLP"</strong>. In tasks like sentiment analysis or translation, this final hidden state is the "sequence embedding" that captures the meaning of the whole input. All three words have contributed to this single vector.`
+  },
+  {
+    title: "Time Step 2 &mdash; Output",
+    subtitle: "Final prediction",
+    draw: "t2_output",
+    math: `<span class="label">Step 3: Final output</span>
+<div class="eq-row">
+<span class="eq-comment">The network's final prediction, informed by the complete sentence</span>
+$$\\color{#34d399}{z_{y2}} = \\color{#fbbf24}{W_{hy}} \\cdot \\color{#c084fc}{h_2} + \\color{#fbbf24}{b_y} = ${fmtVec(z_y[2])}$$
+$$\\color{#34d399}{\\hat{y}_2} = \\mathrm{softmax}(${fmtVec(z_y[2])}) = \\color{#34d399}{${fmtVec(y_hat[2])}}$$
+</div>`,
+    explanation: `The final output is the network's prediction informed by the <strong>entire sentence "I love NLP"</strong>. In language modelling, this would predict the next word. In classification, the final output tells us the category (e.g., positive sentiment).`
+  },
+
+  // ===== SUMMARY =====
+  {
+    title: "Complete Unrolled View",
+    subtitle: "The full forward pass across all time steps",
+    draw: "unrolled",
+    math: `<span class="label">All Hidden States &amp; Outputs</span>
+<div class="eq-row">
+<span class="eq-comment">The hidden state evolves as each word is processed &mdash; like a growing memory</span>
+$$\\color{#c084fc}{h_{-1}} = ${fmtVec(h[0])} \\;\\xrightarrow{\\text{"I"}}\\; \\color{#c084fc}{h_0} = ${fmtVec(h[1])} \\;\\xrightarrow{\\text{"love"}}\\; \\color{#c084fc}{h_1} = ${fmtVec(h[2])} \\;\\xrightarrow{\\text{"NLP"}}\\; \\color{#c084fc}{h_2} = ${fmtVec(h[3])}$$
+</div>
+<div class="eq-row">
+<span class="eq-comment">Each prediction gets better as the network sees more of the sentence</span>
+$$\\color{#34d399}{\\hat{y}_0} = ${fmtVec(y_hat[0])} \\qquad \\color{#34d399}{\\hat{y}_1} = ${fmtVec(y_hat[1])} \\qquad \\color{#34d399}{\\hat{y}_2} = ${fmtVec(y_hat[2])}$$
+</div>`,
+    explanation: `The complete picture: the RNN <strong>unrolled across time</strong>. The same weights (W_xh, W_hh, W_hy) are reused at every step &mdash; this is <strong>weight sharing</strong>. The hidden state flows left-to-right like a conveyor belt of memory. Each output depends on all previous words through the hidden state chain.`
+  },
+  {
+    title: "Key Takeaways",
+    subtitle: "What makes RNNs special &mdash; and their limitations",
+    draw: "summary",
+    math: `<span class="label">RNN Summary</span>
+<div class="eq-row">
+<span class="eq-comment">The two core equations that drive everything we just saw:</span>
+$$\\boxed{\\;\\color{#c084fc}{h_t} = \\tanh\\!\\Big(\\color{#fbbf24}{W_{xh}} \\cdot \\color{#5b9aff}{x_t} + \\color{#fbbf24}{W_{hh}} \\cdot \\color{#c084fc}{h_{t-1}} + \\color{#fbbf24}{b_h}\\Big)\\;}$$
+$$\\boxed{\\;\\color{#34d399}{\\hat{y}_t} = \\mathrm{softmax}\\!\\Big(\\color{#fbbf24}{W_{hy}} \\cdot \\color{#c084fc}{h_t} + \\color{#fbbf24}{b_y}\\Big)\\;}$$
+</div>
+<span class="formula">
+Architecture: Input(2) &rarr; Hidden(2) &rarr; Output(2) &times; 3 steps
+Total: 3 &times; (2&times;2) + 2 + 2 = <span class="val-result">16 learnable parameters</span>
+</span>`,
+    explanation: `RNNs are powerful for sequential data &mdash; text, audio, time series. However, vanilla RNNs struggle with <strong>long-range dependencies</strong> due to vanishing/exploding gradients. This led to <strong>LSTM</strong> and <strong>GRU</strong> variants with gating mechanisms, and eventually <strong>Transformers</strong> which use attention instead of recurrence. But understanding RNNs is foundational to all of modern sequence modeling!`
+  }
+];
+
+// ===== CANVAS DRAWING =====
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let currentStep = 0;
+const CANVAS_H = 380;
+
+function resize() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = rect.width * dpr;
+  canvas.height = CANVAS_H * dpr;
+  canvas.style.height = CANVAS_H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+resize();
+window.addEventListener('resize', () => { resize(); draw(); });
+
+// ===== ANIMATED PARTICLES =====
+let particles = [];
+let animFrame = null;
+let lastTime = 0;
+
+function spawnParticles(paths, color, count) {
+  paths.forEach(p => {
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x1: p.x1, y1: p.y1, x2: p.x2, y2: p.y2,
+        progress: Math.random(),
+        speed: 0.3 + Math.random() * 0.4,
+        color: color,
+        size: 2 + Math.random() * 2,
+        curved: p.curved || false,
+        cx: p.cx || 0, cy: p.cy || 0,
+      });
+    }
+  });
+}
+
+function updateParticles(dt) {
+  particles.forEach(p => {
+    p.progress += p.speed * dt;
+    if (p.progress > 1) p.progress -= 1;
+  });
+}
+
+function drawParticles() {
+  particles.forEach(p => {
+    let x, y;
+    if (p.curved) {
+      const t = p.progress;
+      x = (1-t)*(1-t)*p.x1 + 2*(1-t)*t*p.cx + t*t*p.x2;
+      y = (1-t)*(1-t)*p.y1 + 2*(1-t)*t*p.cy + t*t*p.y2;
+    } else {
+      x = p.x1 + (p.x2 - p.x1) * p.progress;
+      y = p.y1 + (p.y2 - p.y1) * p.progress;
+    }
+    ctx.beginPath();
+    ctx.arc(x, y, p.size, 0, Math.PI * 2);
+    const alpha = Math.sin(p.progress * Math.PI);
+    ctx.fillStyle = p.color;
+    ctx.globalAlpha = alpha * 0.8;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    // Glow
+    ctx.beginPath();
+    ctx.arc(x, y, p.size * 3, 0, Math.PI * 2);
+    ctx.fillStyle = p.color;
+    ctx.globalAlpha = alpha * 0.15;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  });
+}
+
+function animate(time) {
+  const dt = Math.min((time - lastTime) / 1000, 0.05);
+  lastTime = time;
+  updateParticles(dt);
+  drawScene();
+  drawParticles();
+  animFrame = requestAnimationFrame(animate);
+}
+
+function startAnimation() {
+  if (animFrame) cancelAnimationFrame(animFrame);
+  lastTime = performance.now();
+  animFrame = requestAnimationFrame(animate);
+}
+
+function stopAnimation() {
+  if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+  particles = [];
+}
+
+// ===== DRAWING HELPERS =====
+function hexToRGBA(hex, alpha) {
+  hex = hex.replace('#','');
+  if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+  const r = parseInt(hex.substr(0,2),16);
+  const g = parseInt(hex.substr(2,2),16);
+  const b = parseInt(hex.substr(4,2),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function drawNode(x, y, r, color, label, value, active=false, pulse=false) {
+  ctx.save();
+  // Pulse ring
+  if (pulse) {
+    ctx.beginPath();
+    ctx.arc(x, y, r + 8, 0, Math.PI * 2);
+    ctx.fillStyle = hexToRGBA(color, 0.1);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y, r + 4, 0, Math.PI * 2);
+    ctx.fillStyle = hexToRGBA(color, 0.15);
+    ctx.fill();
+  }
+  // Glow
+  if (active) {
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 20;
+  }
+  // Fill
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  const grad = ctx.createRadialGradient(x - r*0.3, y - r*0.3, 0, x, y, r);
+  grad.addColorStop(0, hexToRGBA(color, active ? 0.35 : 0.15));
+  grad.addColorStop(1, hexToRGBA(color, active ? 0.12 : 0.05));
+  ctx.fillStyle = grad;
+  ctx.fill();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = active ? 2.5 : 1.5;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Label above
+  if (label) {
+    ctx.fillStyle = color;
+    ctx.font = 'bold 11px "JetBrains Mono"';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, x, y - r - 10);
+  }
+  // Value inside
+  if (value !== undefined && value !== null) {
+    ctx.fillStyle = COLORS.text;
+    ctx.font = '10px "JetBrains Mono"';
+    ctx.textAlign = 'center';
+    ctx.fillText(value, x, y + 4);
+  }
+  ctx.restore();
+}
+
+function drawArrow(x1, y1, x2, y2, color, label, active=false, dashed=false) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.sqrt(dx*dx + dy*dy);
+  const nx = dx/len, ny = dy/len;
+  const r = 20;
+  const sx = x1 + nx*r, sy = y1 + ny*r;
+  const ex = x2 - nx*r, ey = y2 - ny*r;
+
+  ctx.save();
+  if (active) {
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 6;
+  }
+  ctx.beginPath();
+  if (dashed) ctx.setLineDash([5, 4]);
+  ctx.moveTo(sx, sy);
+  ctx.lineTo(ex, ey);
+  ctx.strokeStyle = active ? color : hexToRGBA(color, 0.35);
+  ctx.lineWidth = active ? 2 : 1;
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.shadowBlur = 0;
+
+  // Arrowhead
+  const ah = 8;
+  const angle = Math.atan2(ey - sy, ex - sx);
+  ctx.beginPath();
+  ctx.moveTo(ex, ey);
+  ctx.lineTo(ex - ah*Math.cos(angle - 0.4), ey - ah*Math.sin(angle - 0.4));
+  ctx.lineTo(ex - ah*Math.cos(angle + 0.4), ey - ah*Math.sin(angle + 0.4));
+  ctx.closePath();
+  ctx.fillStyle = active ? color : hexToRGBA(color, 0.35);
+  ctx.fill();
+
+  if (label) {
+    const mx = (sx + ex) / 2, my = (sy + ey) / 2;
+    ctx.fillStyle = active ? color : hexToRGBA(color, 0.6);
+    ctx.font = '9px "JetBrains Mono"';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, mx - 10, my);
+  }
+  ctx.restore();
+}
+
+function drawCurvedArrow(x1, y1, x2, y2, color, label, active=false, curveUp=true) {
+  const mx = (x1 + x2) / 2;
+  const my = curveUp ? Math.min(y1, y2) - 45 : Math.max(y1, y2) + 45;
+
+  const r = 18;
+  const startY = y1 - r;
+  const endY = y2 - r;
+
+  ctx.save();
+  if (active) { ctx.shadowColor = color; ctx.shadowBlur = 8; }
+  ctx.beginPath();
+  ctx.moveTo(x1, startY);
+  ctx.quadraticCurveTo(mx, my, x2, endY);
+  ctx.strokeStyle = active ? color : hexToRGBA(color, 0.35);
+  ctx.lineWidth = active ? 2.5 : 1;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Arrowhead at end
+  const t = 0.98, t2 = 0.94;
+  const px  = (1-t)*(1-t)*x1 + 2*(1-t)*t*mx + t*t*x2;
+  const py  = (1-t)*(1-t)*startY + 2*(1-t)*t*my + t*t*endY;
+  const px2 = (1-t2)*(1-t2)*x1 + 2*(1-t2)*t2*mx + t2*t2*x2;
+  const py2 = (1-t2)*(1-t2)*startY + 2*(1-t2)*t2*my + t2*t2*endY;
+  const angle = Math.atan2(py - py2, px - px2);
+  ctx.beginPath();
+  ctx.moveTo(px, py);
+  ctx.lineTo(px - 8*Math.cos(angle - 0.4), py - 8*Math.sin(angle - 0.4));
+  ctx.lineTo(px - 8*Math.cos(angle + 0.4), py - 8*Math.sin(angle + 0.4));
+  ctx.closePath();
+  ctx.fillStyle = active ? color : hexToRGBA(color, 0.35);
+  ctx.fill();
+
+  if (label) {
+    ctx.fillStyle = active ? color : hexToRGBA(color, 0.6);
+    ctx.font = active ? 'bold 10px "JetBrains Mono"' : '9px "JetBrains Mono"';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, mx, my - 6);
+  }
+  ctx.restore();
+
+  // Return control point for particle paths
+  return { cx: mx, cy: my, sy: startY, ey: endY };
+}
+
+function drawBracketLabel(x, y, w, text, color) {
+  ctx.save();
+  ctx.strokeStyle = hexToRGBA(color, 0.5);
+  ctx.lineWidth = 1;
+  const half = w / 2;
+  ctx.beginPath();
+  ctx.moveTo(x - half, y);
+  ctx.lineTo(x - half, y + 6);
+  ctx.lineTo(x + half, y + 6);
+  ctx.lineTo(x + half, y);
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.font = '10px "JetBrains Mono"';
+  ctx.textAlign = 'center';
+  ctx.fillText(text, x, y + 19);
+  ctx.restore();
+}
+
+// ===== DRAW SCENES =====
+
+function drawUnrolledRNN(activeT = -1, highlightPhase = '') {
+  const W = canvas.width / (window.devicePixelRatio || 1);
+  const H = CANVAS_H;
+  const cx = W / 2;
+
+  const colW = Math.min(180, (W - 100) / 3);
+  const startX = cx - colW;
+
+  const yIn = 290;
+  const yH = 175;
+  const yOut = 70;
+  const nr = 18;
+
+  // Draw time-step background panels
+  for (let t = 0; t < 3; t++) {
+    const x = startX + t * colW;
+    const isActive = (t === activeT);
+    if (isActive) {
+      ctx.fillStyle = hexToRGBA(COLORS.accent, 0.05);
+      ctx.beginPath();
+      ctx.roundRect(x - colW*0.38, yOut - 35, colW*0.76, yIn - yOut + 85, 12);
+      ctx.fill();
+      ctx.strokeStyle = hexToRGBA(COLORS.accent, 0.15);
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
+  const particlePaths = [];
+
+  for (let t = 0; t < 3; t++) {
+    const x = startX + t * colW;
+    const isActive = (t === activeT);
+    const tLabel = `t = ${t}`;
+
+    // Time label
+    ctx.fillStyle = isActive ? COLORS.text : COLORS.dim;
+    ctx.font = (isActive ? 'bold 13px' : '12px') + ' "Space Grotesk"';
+    ctx.textAlign = 'center';
+    ctx.fillText(tLabel, x, H - 12);
+
+    // Word labels
+    const words = ['"I"', '"love"', '"NLP"'];
+    ctx.fillStyle = isActive ? COLORS.input : hexToRGBA(COLORS.input, 0.5);
+    ctx.font = '10px "DM Sans"';
+    ctx.fillText(words[t], x, yIn + 38);
+
+    // Input nodes
+    const inPhase = isActive && (highlightPhase === 'input' || highlightPhase === 'all');
+    for (let i = 0; i < 2; i++) {
+      const nx = x - 16 + i * 32;
+      drawNode(nx, yIn, nr, COLORS.input, `x${t}[${i}]`, fmt(X[t][i], 1), inPhase, inPhase);
+    }
+
+    // Hidden nodes
+    const hPhase = isActive && (highlightPhase === 'hidden' || highlightPhase === 'all');
+    const hIdx = t + 1;
+    for (let i = 0; i < 2; i++) {
+      const nx = x - 16 + i * 32;
+      drawNode(nx, yH, nr, COLORS.hidden, `h${t}[${i}]`, fmt(h[hIdx][i]), hPhase, hPhase);
+    }
+
+    // Output nodes
+    const oPhase = isActive && (highlightPhase === 'output' || highlightPhase === 'all');
+    for (let i = 0; i < 2; i++) {
+      const nx = x - 16 + i * 32;
+      drawNode(nx, yOut, nr, COLORS.output, `y\u0302${t}[${i}]`, fmt(y_hat[t][i]), oPhase, oPhase);
+    }
+
+    // Arrows: input -> hidden
+    for (let i = 0; i < 2; i++) {
+      for (let j = 0; j < 2; j++) {
+        const ax1 = x - 16 + i*32, ay1 = yIn;
+        const ax2 = x - 16 + j*32, ay2 = yH;
+        drawArrow(ax1, ay1, ax2, ay2, COLORS.weight, '', inPhase);
+        if (inPhase) particlePaths.push({x1:ax1, y1:ay1, x2:ax2, y2:ay2});
+      }
+    }
+
+    // Arrows: hidden -> output
+    for (let i = 0; i < 2; i++) {
+      for (let j = 0; j < 2; j++) {
+        const ax1 = x - 16 + i*32, ay1 = yH;
+        const ax2 = x - 16 + j*32, ay2 = yOut;
+        drawArrow(ax1, ay1, ax2, ay2, COLORS.weight, '', oPhase);
+        if (oPhase) particlePaths.push({x1:ax1, y1:ay1, x2:ax2, y2:ay2});
+      }
+    }
+
+    // Recurrent arrow
+    if (t > 0) {
+      const prevX = startX + (t-1) * colW;
+      const recPhase = isActive && (highlightPhase === 'input' || highlightPhase === 'hidden' || highlightPhase === 'all');
+      const cp = drawCurvedArrow(prevX + 16, yH, x - 16, yH, COLORS.hidden, 'W_hh', recPhase, true);
+      if (recPhase) {
+        particlePaths.push({x1: prevX+16, y1: cp.sy, x2: x-16, y2: cp.ey, curved: true, cx: cp.cx, cy: cp.cy});
+      }
+    }
+  }
+
+  // Layer labels (left side)
+  const labelX = startX - colW * 0.55;
+  ctx.save();
+  ctx.font = '11px "Space Grotesk"';
+  ctx.textAlign = 'right';
+  ctx.fillStyle = COLORS.input;
+  ctx.fillText('Input', labelX, yIn + 4);
+  ctx.fillStyle = COLORS.hidden;
+  ctx.fillText('Hidden', labelX, yH + 4);
+  ctx.fillStyle = COLORS.output;
+  ctx.fillText('Output', labelX, yOut + 4);
+  ctx.restore();
+
+  // Weight labels
+  ctx.fillStyle = hexToRGBA(COLORS.weight, 0.6);
+  ctx.font = '9px "JetBrains Mono"';
+  ctx.textAlign = 'right';
+  ctx.fillText('W_xh', labelX + 2, (yIn + yH) / 2);
+  ctx.fillText('W_hy', labelX + 2, (yH + yOut) / 2);
+
+  return particlePaths;
+}
+
+function drawArchitecture() {
+  const W = canvas.width / (window.devicePixelRatio || 1);
+  const H = CANVAS_H;
+  // Shift network left to make room for recurrent loop + labels on right
+  const cx = W / 2 - 30;
+
+  // Spread layers vertically with generous spacing
+  const yOut = 55;
+  const yH  = 190;
+  const yIn = 325;
+  const nr  = 20;
+  const nodeGap = 80;  // horizontal distance between the two nodes in a layer
+
+  // Draw subtle grid
+  ctx.strokeStyle = hexToRGBA(COLORS.border, 0.3);
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i < W; i += 40) {
+    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, H); ctx.stroke();
+  }
+  for (let i = 0; i < H; i += 40) {
+    ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(W, i); ctx.stroke();
+  }
+
+  // Positions helper
+  const nodeX = (i) => cx - nodeGap/2 + i * nodeGap;
+
+  // --- Arrows first (behind nodes) ---
+  for (let i = 0; i < 2; i++) {
+    for (let j = 0; j < 2; j++) {
+      drawArrow(nodeX(i), yIn, nodeX(j), yH, COLORS.weight, '', true);
+      drawArrow(nodeX(i), yH, nodeX(j), yOut, COLORS.weight, '', true);
+    }
+  }
+
+  // --- Nodes (drawn on top of arrows) ---
+  // Input nodes
+  for (let i = 0; i < 2; i++) {
+    drawNode(nodeX(i), yIn, nr, COLORS.input, `x[${i}]`, null, true);
+  }
+  // Hidden nodes
+  for (let i = 0; i < 2; i++) {
+    drawNode(nodeX(i), yH, nr, COLORS.hidden, `h[${i}]`, null, true);
+  }
+  // Output nodes
+  for (let i = 0; i < 2; i++) {
+    drawNode(nodeX(i), yOut, nr, COLORS.output, `y\u0302[${i}]`, null, true);
+  }
+
+  // --- Recurrent loop (to the right, clear of nodes) ---
+  ctx.save();
+  const loopCx = nodeX(1) + 50;  // center of arc, well right of rightmost hidden node
+  const loopR = 28;
+  ctx.beginPath();
+  ctx.arc(loopCx, yH, loopR, -Math.PI/2, Math.PI/2);
+  ctx.strokeStyle = COLORS.hidden;
+  ctx.lineWidth = 2.5;
+  ctx.shadowColor = COLORS.hidden;
+  ctx.shadowBlur = 10;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  // Arrowhead at top of arc
+  ctx.beginPath();
+  ctx.moveTo(loopCx, yH - loopR);
+  ctx.lineTo(loopCx - 6, yH - loopR + 9);
+  ctx.lineTo(loopCx + 6, yH - loopR + 9);
+  ctx.closePath();
+  ctx.fillStyle = COLORS.hidden;
+  ctx.fill();
+  // W_hh label to the right of the loop
+  ctx.fillStyle = COLORS.hidden;
+  ctx.font = 'bold 11px "JetBrains Mono"';
+  ctx.textAlign = 'left';
+  ctx.fillText('W_hh', loopCx + loopR + 6, yH + 4);
+  ctx.restore();
+
+  // --- Weight labels on the LEFT side, clear of arrows ---
+  const labelX = nodeX(0) - 52;
+  ctx.fillStyle = COLORS.weight;
+  ctx.font = 'bold 11px "JetBrains Mono"';
+  ctx.textAlign = 'right';
+  ctx.fillText('W_xh', labelX, (yIn + yH) / 2 + 2);
+  ctx.fillText('W_hy', labelX, (yH + yOut) / 2 + 2);
+
+  // --- Layer labels below/above each layer, offset to avoid node overlap ---
+  ctx.font = '12px "Space Grotesk"';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = COLORS.input;
+  ctx.fillText('Input Layer (size 2)', cx, yIn + 42);
+  ctx.fillStyle = COLORS.hidden;
+  ctx.fillText('Hidden Layer (size 2)', cx, yH + 42);
+  ctx.fillStyle = COLORS.output;
+  ctx.fillText('Output Layer (size 2)', cx, yOut - 36);
+
+  // --- Activation labels next to the arrows between layers ---
+  ctx.font = '10px "JetBrains Mono"';
+  ctx.textAlign = 'left';
+  const actLabelX = nodeX(1) + 36;
+  ctx.fillStyle = COLORS.accent2;
+  ctx.fillText('tanh', actLabelX, (yIn + yH) / 2 + 2);
+  ctx.fillStyle = COLORS.accent3;
+  ctx.fillText('softmax', actLabelX, (yH + yOut) / 2 + 2);
+
+  // Particles for architecture
+  const paths = [];
+  for (let i = 0; i < 2; i++) {
+    for (let j = 0; j < 2; j++) {
+      paths.push({x1: nodeX(i), y1: yIn, x2: nodeX(j), y2: yH});
+      paths.push({x1: nodeX(i), y1: yH, x2: nodeX(j), y2: yOut});
+    }
+  }
+  return paths;
+}
+
+function drawParamsViz() {
+  const W = canvas.width / (window.devicePixelRatio || 1);
+  const H = CANVAS_H;
+  const cx = W / 2;
+
+  // Draw weight matrices as grids
+  const matrices = [
+    { name: 'W_xh', data: Wxh, color: COLORS.weight, subtitle: 'input \u2192 hidden' },
+    { name: 'W_hh', data: Whh, color: COLORS.hidden, subtitle: 'hidden \u2192 hidden' },
+    { name: 'W_hy', data: Why, color: COLORS.output, subtitle: 'hidden \u2192 output' },
+  ];
+
+  const gridSize = 52;
+  const gap = Math.min(140, (W - 120) / 3);
+  const startMx = cx - gap;
+
+  matrices.forEach((mat, mi) => {
+    const bx = startMx + mi * gap;
+    const by = 100;
+
+    // Matrix label
+    ctx.fillStyle = mat.color;
+    ctx.font = 'bold 13px "JetBrains Mono"';
+    ctx.textAlign = 'center';
+    ctx.fillText(mat.name, bx, by - 30);
+
+    ctx.fillStyle = COLORS.dim;
+    ctx.font = '10px "DM Sans"';
+    ctx.fillText(mat.subtitle, bx, by - 15);
+
+    // Draw 2x2 grid
+    for (let r = 0; r < 2; r++) {
+      for (let c = 0; c < 2; c++) {
+        const gx = bx - gridSize/2 + c * gridSize;
+        const gy = by + r * gridSize;
+        const val = mat.data[r][c];
+        const intensity = Math.abs(val);
+
+        ctx.fillStyle = hexToRGBA(mat.color, 0.08 + intensity * 0.2);
+        ctx.beginPath();
+        ctx.roundRect(gx - gridSize/2 + 3, gy - gridSize/2 + 3, gridSize - 6, gridSize - 6, 6);
+        ctx.fill();
+        ctx.strokeStyle = hexToRGBA(mat.color, 0.3);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.fillStyle = val >= 0 ? COLORS.text : COLORS.accent2;
+        ctx.font = 'bold 14px "JetBrains Mono"';
+        ctx.textAlign = 'center';
+        ctx.fillText(val.toFixed(1), gx, gy + 5);
+      }
+    }
+  });
+
+  // Biases
+  const biasY = 260;
+  ctx.fillStyle = COLORS.dim;
+  ctx.font = '11px "JetBrains Mono"';
+  ctx.textAlign = 'center';
+  ctx.fillText('Biases (all zeros for simplicity)', cx, biasY);
+
+  ctx.fillStyle = COLORS.weight;
+  ctx.font = '12px "JetBrains Mono"';
+  ctx.fillText(`b_h = ${fmtVec(bh,1)}     b_y = ${fmtVec(by,1)}`, cx, biasY + 22);
+
+  // Total params
+  ctx.fillStyle = COLORS.accent3;
+  ctx.font = 'bold 12px "Space Grotesk"';
+  ctx.fillText('Total: 3 \u00d7 (2\u00d72) + 2 + 2 = 16 learnable parameters', cx, biasY + 55);
+
+  return [];
+}
+
+function drawInputsViz() {
+  const W = canvas.width / (window.devicePixelRatio || 1);
+  const H = CANVAS_H;
+  const cx = W / 2;
+
+  // Draw inputs as colored cards
+  const words = ['"I"', '"love"', '"NLP"'];
+  const gap = Math.min(160, (W - 80) / 3);
+  const startX = cx - gap;
+
+  for (let t = 0; t < 3; t++) {
+    const bx = startX + t * gap;
+    const by = 80;
+
+    // Card background
+    ctx.fillStyle = hexToRGBA(COLORS.input, 0.08);
+    ctx.beginPath();
+    ctx.roundRect(bx - 55, by - 20, 110, 140, 10);
+    ctx.fill();
+    ctx.strokeStyle = hexToRGBA(COLORS.input, 0.3);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Time label
+    ctx.fillStyle = COLORS.accent;
+    ctx.font = 'bold 12px "Space Grotesk"';
+    ctx.textAlign = 'center';
+    ctx.fillText(`t = ${t}`, bx, by);
+
+    // Word
+    ctx.fillStyle = COLORS.text;
+    ctx.font = '14px "DM Sans"';
+    ctx.fillText(words[t], bx, by + 24);
+
+    // Vector
+    ctx.fillStyle = COLORS.input;
+    ctx.font = 'bold 13px "JetBrains Mono"';
+    ctx.fillText(`x${t}`, bx, by + 52);
+
+    // Values
+    ctx.font = '12px "JetBrains Mono"';
+    ctx.fillText(fmtVec(X[t], 1), bx, by + 74);
+
+    // Arrow down
+    if (t < 2) {
+      ctx.fillStyle = hexToRGBA(COLORS.dim, 0.5);
+      ctx.font = '16px sans-serif';
+      ctx.fillText('\u2192', bx + gap/2, by + 40);
+    }
+  }
+
+  // Initial hidden state
+  const hy = 270;
+  ctx.fillStyle = hexToRGBA(COLORS.hidden, 0.08);
+  ctx.beginPath();
+  ctx.roundRect(cx - 100, hy - 15, 200, 55, 10);
+  ctx.fill();
+  ctx.strokeStyle = hexToRGBA(COLORS.hidden, 0.3);
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.fillStyle = COLORS.hidden;
+  ctx.font = 'bold 12px "JetBrains Mono"';
+  ctx.textAlign = 'center';
+  ctx.fillText('Initial hidden state', cx, hy + 5);
+  ctx.font = '12px "JetBrains Mono"';
+  ctx.fillText(`h\u208B\u2081 = ${fmtVec(h_init, 1)}  (zeros)`, cx, hy + 26);
+
+  return [];
+}
+
+function drawSummary() {
+  const W = canvas.width / (window.devicePixelRatio || 1);
+  const H = CANVAS_H;
+  const cx = W / 2;
+
+  const items = [
+    { icon: '\u27F3', text: 'Recurrence: hidden state feeds back each step', color: COLORS.hidden },
+    { icon: '\u2261', text: 'Weight sharing: same W_xh, W_hh, W_hy at every t', color: COLORS.weight },
+    { icon: '\u2192', text: 'Memory: h\u209C encodes all inputs x\u2080 ... x\u209C', color: COLORS.accent },
+    { icon: '\u2211', text: 'Softmax outputs: probabilities at each step', color: COLORS.output },
+    { icon: '\u26A0', text: 'Limitation: vanishing gradients \u2192 LSTM / GRU / Transformers', color: COLORS.accent2 },
+  ];
+
+  items.forEach((item, i) => {
+    const y = 40 + i * 64;
+    const x = cx;
+    const cardW = Math.min(440, W - 60);
+
+    ctx.fillStyle = hexToRGBA(item.color, 0.06);
+    ctx.beginPath();
+    ctx.roundRect(x - cardW/2, y - 4, cardW, 48, 10);
+    ctx.fill();
+    ctx.strokeStyle = hexToRGBA(item.color, 0.25);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Left accent bar
+    ctx.fillStyle = item.color;
+    ctx.beginPath();
+    ctx.roundRect(x - cardW/2, y - 4, 4, 48, [10,0,0,10]);
+    ctx.fill();
+
+    // Icon
+    ctx.font = 'bold 18px "JetBrains Mono"';
+    ctx.fillStyle = item.color;
+    ctx.textAlign = 'center';
+    ctx.fillText(item.icon, x - cardW/2 + 28, y + 28);
+
+    // Text
+    ctx.fillStyle = COLORS.text;
+    ctx.font = '13px "DM Sans"';
+    ctx.textAlign = 'left';
+    ctx.fillText(item.text, x - cardW/2 + 52, y + 26);
+    ctx.textAlign = 'center';
+  });
+
+  return [];
+}
+
+// ===== TANH MINI-VIZ for hidden state steps =====
+function drawTanhMini(cx, y, input, output) {
+  const w = 70, h = 40;
+  const x0 = cx - w/2;
+
+  // Box
+  ctx.fillStyle = hexToRGBA(COLORS.accent2, 0.08);
+  ctx.beginPath();
+  ctx.roundRect(x0, y, w, h, 6);
+  ctx.fill();
+  ctx.strokeStyle = hexToRGBA(COLORS.accent2, 0.4);
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.fillStyle = COLORS.accent2;
+  ctx.font = 'bold 10px "JetBrains Mono"';
+  ctx.textAlign = 'center';
+  ctx.fillText('tanh', cx, y + 15);
+
+  // Mini curve
+  ctx.beginPath();
+  ctx.strokeStyle = COLORS.accent2;
+  ctx.lineWidth = 1.5;
+  for (let px = 0; px <= w - 12; px++) {
+    const t = (px / (w - 12)) * 4 - 2;
+    const v = Math.tanh(t);
+    const py = y + h - 6 - (v + 1) / 2 * (h - 18);
+    if (px === 0) ctx.moveTo(x0 + 6 + px, py);
+    else ctx.lineTo(x0 + 6 + px, py);
+  }
+  ctx.stroke();
+}
+
+// ===== MAIN DRAW =====
+function drawScene() {
+  const W = canvas.width / (window.devicePixelRatio || 1);
+  const H = CANVAS_H;
+  ctx.clearRect(0, 0, W, H);
+
+  const step = steps[currentStep];
+
+  switch (step.draw) {
+    case 'architecture': return drawArchitecture();
+    case 'params': return drawParamsViz();
+    case 'inputs': return drawInputsViz();
+    case 't0_input': return drawUnrolledRNN(0, 'input');
+    case 't0_hidden': return drawUnrolledRNN(0, 'hidden');
+    case 't0_output': return drawUnrolledRNN(0, 'output');
+    case 't1_input': return drawUnrolledRNN(1, 'input');
+    case 't1_hidden': return drawUnrolledRNN(1, 'hidden');
+    case 't1_output': return drawUnrolledRNN(1, 'output');
+    case 't2_input': return drawUnrolledRNN(2, 'input');
+    case 't2_hidden': return drawUnrolledRNN(2, 'hidden');
+    case 't2_output': return drawUnrolledRNN(2, 'output');
+    case 'unrolled': return drawUnrolledRNN(-1, 'all');
+    case 'summary': return drawSummary();
+  }
+  return [];
+}
+
+function draw() {
+  stopAnimation();
+  const paths = drawScene();
+  if (paths && paths.length > 0) {
+    const step = steps[currentStep];
+    let pColor = COLORS.accent2;
+    if (step.draw.includes('input')) pColor = COLORS.input;
+    else if (step.draw.includes('hidden')) pColor = COLORS.hidden;
+    else if (step.draw.includes('output')) pColor = COLORS.output;
+    spawnParticles(paths, pColor, 2);
+    startAnimation();
+  }
+}
+
+// ===== STEP NAVIGATION =====
+function buildIndicator() {
+  const el = document.getElementById('stepIndicator');
+  el.innerHTML = '';
+  steps.forEach((_, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'step-dot' + (i === currentStep ? ' active' : (i < currentStep ? ' visited' : ''));
+    dot.onclick = () => goToStep(i);
+    el.appendChild(dot);
+  });
+}
+
+function updateUI() {
+  const step = steps[currentStep];
+  document.getElementById('stepNum').textContent = `${currentStep + 1} / ${steps.length}`;
+  document.getElementById('stepTitle').textContent = step.title;
+  document.getElementById('stepSubtitle').textContent = step.subtitle;
+  document.getElementById('mathPanel').innerHTML = `<div class="math-block">${step.math}</div>`;
+  document.getElementById('explanation').innerHTML = step.explanation;
+  // Render LaTeX equations with KaTeX
+  if (typeof renderMathInElement === 'function') {
+    renderMathInElement(document.getElementById('mathPanel'), {
+      delimiters: [
+        {left: '$$', right: '$$', display: true},
+        {left: '$', right: '$', display: false}
+      ],
+      throwOnError: false
+    });
+  }
+  document.getElementById('navLabel').textContent = `Step ${currentStep + 1} of ${steps.length}`;
+  document.getElementById('btnPrev').disabled = currentStep === 0;
+  document.getElementById('btnNext').disabled = currentStep === steps.length - 1;
+  document.getElementById('btnNext').innerHTML = currentStep === steps.length - 1 ? 'Done &#10003;' : 'Next &#8594;';
+  buildIndicator();
+  draw();
+}
+
+function goToStep(i) {
+  currentStep = Math.max(0, Math.min(steps.length - 1, i));
+  updateUI();
+}
+
+function nextStep() { goToStep(currentStep + 1); }
+function prevStep() { goToStep(currentStep - 1); }
+
+// Keyboard navigation
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); nextStep(); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); prevStep(); }
+});
+
+// Init - wait for KaTeX to load, then render
+function initApp() {
+  if (typeof renderMathInElement === 'function') {
+    updateUI();
+  } else {
+    // KaTeX not loaded yet (deferred), retry shortly
+    setTimeout(initApp, 100);
+  }
+}
+// Kick off immediately if KaTeX is ready, otherwise wait
+if (document.readyState === 'complete') {
+  initApp();
+} else {
+  window.addEventListener('load', initApp);
+}
+</script>
+</body>
+</html>

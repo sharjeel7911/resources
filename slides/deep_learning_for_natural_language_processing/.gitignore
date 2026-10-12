@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.env
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# LaTeX auxiliary files
+*.aux
+*.log
+*.out
+*.toc
+*.nav
+*.snm
+*.vrb
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+
+# OS files
+.DS_Store
+Thumbs.db
+~$*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Private / instructor-only (files starting with _ are private)
+_*
+**/_*
+private/
+*_solutions.*
+*_Solutions.*
+*_SOLUTIONS.*
+instructor/
+
+# Large data files
+*.csv
+*.parquet
+!data/*.csv
+
+# Backups
+*.bak
+*_old.*
+backups/
+working_space/
+processed_content/
+
+# LaTeX source files (only PDFs are published)
+*.tex
+*.mp4

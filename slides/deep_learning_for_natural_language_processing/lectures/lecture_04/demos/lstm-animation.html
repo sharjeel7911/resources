@@ -1,0 +1,1564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How LSTM Networks Work</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<style>
+  :root {
+    --bg: #0c0e14;
+    --surface: #13161f;
+    --surface2: #1a1e2a;
+    --border: #2a2f3e;
+    --text: #e2e4ea;
+    --text-dim: #7a8199;
+    --accent: #6c9cff;
+    --accent2: #ff7eb3;
+    --accent3: #7affc1;
+    --accent4: #ffcb6b;
+    --input-color: #5b9aff;
+    --hidden-color: #c084fc;
+    --output-color: #34d399;
+    --weight-color: #fbbf24;
+    --cell-color: #f97316;
+    --forget-color: #ef4444;
+    --gate-input-color: #3b82f6;
+    --gate-output-color: #a855f7;
+    --candidate-color: #14b8a6;
+    --radius: 12px;
+    --card-shadow: 0 2px 16px rgba(0,0,0,0.3);
+  }
+
+  [data-theme="light"] {
+    --bg: #f4f6fb;
+    --surface: #ffffff;
+    --surface2: #edf0f7;
+    --border: #d0d5e0;
+    --text: #1a1d2e;
+    --text-dim: #6b7394;
+    --accent: #4a7fe5;
+    --accent2: #e0558a;
+    --accent3: #1fa868;
+    --accent4: #d49800;
+    --input-color: #3b78e7;
+    --hidden-color: #9055d6;
+    --output-color: #1a9e6b;
+    --weight-color: #c88a00;
+    --cell-color: #c2410c;
+    --forget-color: #dc2626;
+    --gate-input-color: #2563eb;
+    --gate-output-color: #7c3aed;
+    --candidate-color: #0d9488;
+    --card-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    transition: background 0.35s, color 0.35s;
+  }
+
+  .app { max-width: 1200px; margin: 0 auto; padding: 24px; }
+
+  header { text-align: center; padding: 24px 0 16px; position: relative; }
+
+  header h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 2rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--cell-color), var(--accent), var(--hidden-color));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+
+  header p { color: var(--text-dim); font-size: 0.95rem; max-width: 660px; margin: 0 auto; }
+
+  .theme-toggle {
+    position: absolute; top: 24px; right: 0;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 30px; padding: 6px 14px; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; font-size: 0.82rem; font-weight: 500;
+    color: var(--text); display: flex; align-items: center; gap: 6px; transition: all 0.3s;
+  }
+  .theme-toggle:hover { border-color: var(--accent); background: var(--surface); }
+
+  .step-indicator { display: flex; align-items: center; justify-content: center; gap: 4px; margin: 16px 0; }
+  .step-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border); transition: all 0.3s; cursor: pointer; }
+  .step-dot.active { background: var(--accent); box-shadow: 0 0 8px var(--accent); transform: scale(1.3); }
+  .step-dot.visited { background: var(--accent); opacity: 0.4; }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 24px; position: relative; overflow: hidden; box-shadow: var(--card-shadow);
+    transition: background 0.35s, border-color 0.35s, box-shadow 0.35s;
+  }
+  .card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, var(--cell-color), var(--accent), var(--hidden-color), var(--accent3));
+  }
+  .card-title {
+    font-family: 'Space Grotesk', sans-serif; font-size: 1.1rem; font-weight: 600;
+    margin-bottom: 4px; display: flex; align-items: center; gap: 8px;
+  }
+  .card-title .step-num {
+    background: var(--accent); color: #fff; font-size: 0.7rem; font-weight: 700;
+    padding: 2px 8px; border-radius: 20px;
+  }
+  .card-subtitle { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 16px; }
+
+  .viz-area {
+    background: var(--bg); border-radius: var(--radius); border: 1px solid var(--border);
+    min-height: 440px; position: relative; overflow: hidden; transition: background 0.35s, border-color 0.35s;
+  }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  .legend {
+    display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; padding: 10px 14px;
+    background: var(--surface2); border-radius: 8px; font-size: 0.78rem; transition: background 0.35s;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+  .math-panel { margin-top: 16px; }
+  .math-block {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 16px; font-family: 'JetBrains Mono', monospace; font-size: 0.82rem;
+    line-height: 1.8; overflow-x: auto; transition: background 0.35s, border-color 0.35s;
+  }
+  .math-block .label { color: var(--text-dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; display: block; }
+  .math-block .formula { color: var(--text); }
+  .math-block .val-result { color: var(--accent3); font-weight: 600; }
+  [data-theme="light"] .math-block .val-result { color: #0d8a4f; font-weight: 700; }
+
+  .math-block .katex { font-size: 1.35em; }
+  .math-block .katex-display { margin: 0.5em 0; }
+  .math-block .katex-display > .katex { text-align: left; }
+  .math-block .eq-row { margin: 6px 0; }
+  .math-block .eq-comment {
+    display: block; color: var(--text-dim); font-size: 0.8rem; font-style: italic;
+    margin: 4px 0 2px 4px; font-family: 'DM Sans', sans-serif;
+  }
+
+  [data-theme="light"] .math-block .katex,
+  [data-theme="light"] .math-block .katex .mord,
+  [data-theme="light"] .math-block .katex .mbin,
+  [data-theme="light"] .math-block .katex .mrel,
+  [data-theme="light"] .math-block .katex .mopen,
+  [data-theme="light"] .math-block .katex .mclose,
+  [data-theme="light"] .math-block .katex .mpunct,
+  [data-theme="light"] .math-block .katex .mop,
+  [data-theme="light"] .math-block .katex .minner,
+  [data-theme="light"] .math-block .katex .mtext { color: #1a1d2e; }
+
+  [data-theme="light"] .math-block .katex [style*="color:#c084fc"],
+  [data-theme="light"] .math-block .katex [style*="color: #c084fc"] { color: #7c3aed !important; }
+  [data-theme="light"] .math-block .katex [style*="color:#5b9aff"],
+  [data-theme="light"] .math-block .katex [style*="color: #5b9aff"] { color: #2563eb !important; }
+  [data-theme="light"] .math-block .katex [style*="color:#fbbf24"],
+  [data-theme="light"] .math-block .katex [style*="color: #fbbf24"] { color: #b45309 !important; }
+  [data-theme="light"] .math-block .katex [style*="color:#34d399"],
+  [data-theme="light"] .math-block .katex [style*="color: #34d399"] { color: #047857 !important; }
+  [data-theme="light"] .math-block .katex [style*="color:#f97316"],
+  [data-theme="light"] .math-block .katex [style*="color: #f97316"] { color: #c2410c !important; }
+  [data-theme="light"] .math-block .katex [style*="color:#ef4444"],
+  [data-theme="light"] .math-block .katex [style*="color: #ef4444"] { color: #dc2626 !important; }
+  [data-theme="light"] .math-block .katex [style*="color:#3b82f6"],
+  [data-theme="light"] .math-block .katex [style*="color: #3b82f6"] { color: #1d4ed8 !important; }
+  [data-theme="light"] .math-block .katex [style*="color:#a855f7"],
+  [data-theme="light"] .math-block .katex [style*="color: #a855f7"] { color: #7c3aed !important; }
+  [data-theme="light"] .math-block .katex [style*="color:#14b8a6"],
+  [data-theme="light"] .math-block .katex [style*="color: #14b8a6"] { color: #0d9488 !important; }
+
+  .explanation {
+    margin-top: 12px; padding: 14px 16px;
+    background: rgba(108,156,255,0.06); border-left: 3px solid var(--accent);
+    border-radius: 0 8px 8px 0; font-size: 0.88rem; line-height: 1.6;
+    color: var(--text); transition: background 0.35s;
+  }
+  [data-theme="light"] .explanation { background: rgba(74,127,229,0.07); }
+  .explanation strong { color: var(--accent); }
+
+  .nav-bar { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; gap: 12px; }
+  .nav-btn {
+    font-family: 'Space Grotesk', sans-serif; font-size: 0.9rem; font-weight: 600;
+    padding: 10px 28px; border: none; border-radius: 8px; cursor: pointer;
+    transition: all 0.2s; display: flex; align-items: center; gap: 8px;
+  }
+  .nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .btn-prev { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-prev:hover:not(:disabled) { background: var(--border); }
+  .btn-next { background: linear-gradient(135deg, var(--accent), #5080ee); color: #fff; }
+  .btn-next:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(108,156,255,0.3); }
+  .step-label { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--text-dim); }
+
+  @media (max-width: 768px) {
+    .app { padding: 12px; }
+    header h1 { font-size: 1.4rem; }
+    .card { padding: 16px; }
+    .math-block { font-size: 0.72rem; padding: 12px; }
+    .math-block .katex { font-size: 1.1em; }
+    .nav-btn { padding: 8px 16px; font-size: 0.82rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header>
+    <h1>How LSTM Networks Work</h1>
+    <p>An interactive step-by-step walkthrough of a Long Short-Term Memory cell &mdash; the gates, the cell state, and every computation shown</p>
+    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">
+      <span class="theme-icon" id="themeIcon">&#9789;</span>
+      <span id="themeLabel">Light</span>
+    </button>
+  </header>
+
+  <div class="step-indicator" id="stepIndicator"></div>
+
+  <div class="main-content">
+    <div class="card">
+      <div class="card-title">
+        <span class="step-num" id="stepNum">1 / 16</span>
+        <span id="stepTitle">Loading...</span>
+      </div>
+      <div class="card-subtitle" id="stepSubtitle"></div>
+
+      <div class="viz-area">
+        <canvas id="canvas"></canvas>
+      </div>
+
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--input-color)"></div> Input x<sub>t</sub></div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--hidden-color)"></div> Hidden h<sub>t</sub></div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--cell-color)"></div> Cell C<sub>t</sub></div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--forget-color)"></div> Forget gate</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--gate-input-color)"></div> Input gate</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--gate-output-color)"></div> Output gate</div>
+      </div>
+
+      <div class="math-panel" id="mathPanel"></div>
+      <div class="explanation" id="explanation"></div>
+    </div>
+  </div>
+
+  <div class="nav-bar">
+    <button class="nav-btn btn-prev" id="btnPrev" onclick="prevStep()">&#8592; Previous</button>
+    <span class="step-label" id="navLabel">Step 1 of 16</span>
+    <button class="nav-btn btn-next" id="btnNext" onclick="nextStep()">Next &#8594;</button>
+  </div>
+</div>
+
+<script>
+// ===== THEME =====
+function getThemeColors() {
+  const cs = getComputedStyle(document.documentElement);
+  const g = k => cs.getPropertyValue(k).trim();
+  return {
+    input: g('--input-color'), hidden: g('--hidden-color'), output: g('--output-color'),
+    weight: g('--weight-color'), cell: g('--cell-color'), forget: g('--forget-color'),
+    gateIn: g('--gate-input-color'), gateOut: g('--gate-output-color'),
+    candidate: g('--candidate-color'),
+    bg: g('--bg'), surface: g('--surface'), border: g('--border'),
+    text: g('--text'), dim: g('--text-dim'), accent: g('--accent'),
+    accent2: g('--accent2'), accent3: g('--accent3'),
+  };
+}
+let C = getThemeColors();
+let isLight = false;
+
+function toggleTheme() {
+  isLight = !isLight;
+  document.documentElement.setAttribute('data-theme', isLight ? 'light' : '');
+  document.getElementById('themeIcon').innerHTML = isLight ? '&#9788;' : '&#9789;';
+  document.getElementById('themeLabel').textContent = isLight ? 'Dark' : 'Light';
+  requestAnimationFrame(() => { C = getThemeColors(); draw(); });
+}
+
+// ===== LSTM PARAMETERS =====
+// Simplified 2-dimensional LSTM for pedagogical clarity
+// Weights are [input_dim + hidden_dim] -> [hidden_dim], i.e. 4-input to 2-output
+const Wf = [[0.4, -0.2, 0.3, 0.1], [0.1, 0.5, -0.1, 0.3]];  // forget gate
+const Wi = [[0.6, 0.1, -0.2, 0.4], [-0.1, 0.3, 0.5, 0.2]];   // input gate
+const Wc = [[0.3, -0.4, 0.2, 0.1], [0.5, 0.2, -0.3, 0.4]];   // candidate
+const Wo = [[0.2, 0.3, 0.4, -0.1], [0.1, -0.2, 0.3, 0.6]];   // output gate
+const bf = [0.0, 0.0], bi = [0.0, 0.0], bc = [0.0, 0.0], bo = [0.0, 0.0];
+
+// Input sequence
+const X = [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]];
+const h_init = [0.0, 0.0];
+const c_init = [0.0, 0.0];
+
+// ===== MATH HELPERS =====
+function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
+function tanhF(x) { return Math.tanh(x); }
+function matVecMul(M, v) { return M.map(row => row.reduce((s, w, j) => s + w * v[j], 0)); }
+function vecAdd(a, b) { return a.map((v, i) => v + b[i]); }
+function vecMul(a, b) { return a.map((v, i) => v * b[i]); }  // element-wise (Hadamard)
+function fmt(v, d=4) { return typeof v === 'number' ? v.toFixed(d) : v; }
+function fmtVec(v, d=4) { return '[' + v.map(x => fmt(x, d)).join(', ') + ']'; }
+function concat(a, b) { return [...a, ...b]; }
+
+// ===== FORWARD PASS =====
+const hs = [h_init];        // hidden states
+const cs = [c_init];        // cell states
+const fs = [], is_ = [], c_tildes = [], os = [];
+const z_f = [], z_i = [], z_c = [], z_o = [];
+
+for (let t = 0; t < 3; t++) {
+  const xh = concat(X[t], hs[t]); // [x_t, h_{t-1}]
+
+  // Forget gate
+  const zf = vecAdd(matVecMul(Wf, xh), bf);
+  z_f.push(zf);
+  const ft = zf.map(sigmoid);
+  fs.push(ft);
+
+  // Input gate
+  const zi = vecAdd(matVecMul(Wi, xh), bi);
+  z_i.push(zi);
+  const it = zi.map(sigmoid);
+  is_.push(it);
+
+  // Candidate values
+  const zc = vecAdd(matVecMul(Wc, xh), bc);
+  z_c.push(zc);
+  const ct_tilde = zc.map(tanhF);
+  c_tildes.push(ct_tilde);
+
+  // Cell state update:  C_t = f_t * C_{t-1} + i_t * C_tilde_t
+  const ct = vecAdd(vecMul(ft, cs[t]), vecMul(it, ct_tilde));
+  cs.push(ct);
+
+  // Output gate
+  const zo = vecAdd(matVecMul(Wo, xh), bo);
+  z_o.push(zo);
+  const ot = zo.map(sigmoid);
+  os.push(ot);
+
+  // Hidden state:  h_t = o_t * tanh(C_t)
+  const ht = vecMul(ot, ct.map(tanhF));
+  hs.push(ht);
+}
+
+// Verification
+console.log('=== LSTM Forward Pass ===');
+for (let t = 0; t < 3; t++) {
+  console.log(`t=${t}: f=${fmtVec(fs[t])}, i=${fmtVec(is_[t])}, C~=${fmtVec(c_tildes[t])}, C=${fmtVec(cs[t+1])}, o=${fmtVec(os[t])}, h=${fmtVec(hs[t+1])}`);
+}
+
+// ===== STEP DEFINITIONS =====
+const steps = [
+  // 0 — WHY LSTM
+  {
+    title: "Why LSTM? The Problem with Vanilla RNNs",
+    subtitle: "Vanishing gradients make RNNs forget",
+    draw: "why_lstm",
+    math: `<span class="label">The Vanishing Gradient Problem</span>
+<div class="eq-row">
+<span class="eq-comment">In a vanilla RNN, information decays exponentially over time steps:</span>
+$$\\color{#c084fc}{h_t} = \\tanh\\!\\big(W_{xh} \\cdot x_t + W_{hh} \\cdot h_{t-1} + b_h\\big)$$
+</div>
+<div class="eq-row">
+<span class="eq-comment">After many steps, gradients shrink toward zero &mdash; the network "forgets" early words</span>
+$$\\frac{\\partial h_t}{\\partial h_0} \\approx \\prod_{k=1}^{t} W_{hh} \\cdot \\text{diag}(\\tanh') \\;\\longrightarrow\\; \\mathbf{0}$$
+</div>`,
+    explanation: `A vanilla RNN multiplies gradients through the same weight matrix at every time step. After many steps, this causes gradients to <strong>vanish</strong> (shrink to zero) or <strong>explode</strong> (grow uncontrollably). This means the network cannot learn long-range dependencies &mdash; e.g., connecting "The cat, which sat on the warm mat all afternoon, <strong>was</strong> sleeping" across many words. <strong>LSTM solves this</strong> with a dedicated memory highway called the <strong>cell state</strong>.`
+  },
+
+  // 1 — ARCHITECTURE OVERVIEW
+  {
+    title: "The LSTM Architecture",
+    subtitle: "Three gates + one cell state = long-term memory",
+    draw: "architecture",
+    math: `<span class="label">LSTM Core Equations &mdash; Four Steps</span>
+<div class="eq-row">
+<span class="eq-comment">1. Forget gate: what old info to throw away?</span>
+$$\\color{#ef4444}{f_t} = \\sigma\\!\\big(W_f \\cdot [\\color{#c084fc}{h_{t-1}},\\, \\color{#5b9aff}{x_t}] + b_f\\big)$$
+</div>
+<div class="eq-row">
+<span class="eq-comment">2. Input gate + candidate: what new info to store?</span>
+$$\\color{#3b82f6}{i_t} = \\sigma\\!\\big(W_i \\cdot [\\color{#c084fc}{h_{t-1}},\\, \\color{#5b9aff}{x_t}] + b_i\\big) \\qquad \\color{#14b8a6}{\\tilde{C}_t} = \\tanh\\!\\big(W_C \\cdot [\\color{#c084fc}{h_{t-1}},\\, \\color{#5b9aff}{x_t}] + b_C\\big)$$
+</div>
+<div class="eq-row">
+<span class="eq-comment">3. Cell state update: selectively forget + selectively write</span>
+$$\\color{#f97316}{C_t} = \\color{#ef4444}{f_t} \\odot \\color{#f97316}{C_{t-1}} \\;+\\; \\color{#3b82f6}{i_t} \\odot \\color{#14b8a6}{\\tilde{C}_t}$$
+</div>
+<div class="eq-row">
+<span class="eq-comment">4. Output gate: what part of the cell state to reveal as output?</span>
+$$\\color{#a855f7}{o_t} = \\sigma\\!\\big(W_o \\cdot [\\color{#c084fc}{h_{t-1}},\\, \\color{#5b9aff}{x_t}] + b_o\\big) \\qquad \\color{#c084fc}{h_t} = \\color{#a855f7}{o_t} \\odot \\tanh(\\color{#f97316}{C_t})$$
+</div>`,
+    explanation: `The LSTM has <strong>three gates</strong> (forget, input, output) that act like valves controlling information flow. The <strong>cell state</strong> C_t is the key innovation &mdash; it's a highway that runs through all time steps with only simple element-wise operations (multiply and add), so gradients flow through it easily. Think of it as a <strong>conveyor belt</strong>: the gates decide what to remove, what to add, and what to read from it.`
+  },
+
+  // 2 — THE CONVEYOR BELT ANALOGY
+  {
+    title: "The Conveyor Belt Analogy",
+    subtitle: "The cell state is a highway for information",
+    draw: "conveyor",
+    math: `<span class="label">Cell State = Conveyor Belt</span>
+<div class="eq-row">
+<span class="eq-comment">The cell state flows horizontally with only multiply (&odot;) and add (+) &mdash; no matrix multiplications!</span>
+$$\\color{#f97316}{C_t} = \\underbrace{\\color{#ef4444}{f_t} \\odot \\color{#f97316}{C_{t-1}}}_{\\text{selectively forget}} \\;+\\; \\underbrace{\\color{#3b82f6}{i_t} \\odot \\color{#14b8a6}{\\tilde{C}_t}}_{\\text{selectively write}}$$
+</div>
+<div class="eq-row">
+<span class="eq-comment">&odot; means element-wise multiplication: each dimension is controlled independently</span>
+$$\\text{If } \\color{#ef4444}{f_t} = [1, 1] \\text{ &mdash; keep everything. If } \\color{#ef4444}{f_t} = [0, 0] \\text{ &mdash; erase everything.}$$
+</div>`,
+    explanation: `Imagine a <strong>conveyor belt</strong> carrying information across time. At each step: the <strong>forget gate</strong> decides what to remove from the belt (erase old memory), and the <strong>input gate</strong> decides what new items to place on the belt (write new memory). Because the cell state uses only element-wise operations, gradients can flow backwards for hundreds of time steps without vanishing &mdash; this is the LSTM's superpower!`
+  },
+
+  // 3 — PARAMETERS
+  {
+    title: "Network Parameters",
+    subtitle: "Our tiny LSTM: input=2, hidden=2",
+    draw: "params",
+    math: `<span class="label">Weight Matrices (each maps [x_t, h_{t-1}] to hidden)</span>
+<div class="eq-row">
+<span class="eq-comment">Four weight matrices &mdash; one per gate/candidate. Each is 2&times;4 (2 hidden, 4 = 2 input + 2 hidden)</span>
+$$\\color{#ef4444}{W_f}\\text{ (forget)}\\quad \\color{#3b82f6}{W_i}\\text{ (input)}\\quad \\color{#14b8a6}{W_C}\\text{ (candidate)}\\quad \\color{#a855f7}{W_o}\\text{ (output)}$$
+$$\\text{Total: } 4 \\times (2 \\times 4) + 4 \\times 2 = \\color{#34d399}{40 \\text{ parameters}}$$
+</div>
+<div class="eq-row">
+<span class="eq-comment">That's 2.5&times; more parameters than a vanilla RNN &mdash; the price of long-term memory</span>
+</div>`,
+    explanation: `Our LSTM has <strong>2 input features</strong> and <strong>2 hidden units</strong>. Each gate uses a weight matrix that takes the concatenation [x_t, h_{t-1}] (size 4) and produces a 2D vector. There are <strong>4 such matrices</strong> (forget, input, candidate, output) plus 4 bias vectors. More parameters than a vanilla RNN, but this is the cost of being able to selectively remember and forget.`
+  },
+
+  // 4 — INPUT SEQUENCE
+  {
+    title: "Input Sequence & Initial State",
+    subtitle: "Three words: \"I love NLP\"",
+    draw: "inputs",
+    math: `<span class="label">Input Sequence (3 time steps)</span>
+<div class="eq-row">
+<span class="eq-comment">Same words as our RNN example, so you can compare the two architectures</span>
+$$\\color{#5b9aff}{x_0} = ${fmtVec(X[0],1)} \\;\\text{ ("I")} \\qquad \\color{#5b9aff}{x_1} = ${fmtVec(X[1],1)} \\;\\text{ ("love")} \\qquad \\color{#5b9aff}{x_2} = ${fmtVec(X[2],1)} \\;\\text{ ("NLP")}$$
+</div>
+<div class="eq-row">
+<span class="eq-comment">Both cell state AND hidden state start at zero &mdash; blank memory</span>
+$$\\color{#c084fc}{h_{-1}} = ${fmtVec(h_init,1)} \\qquad \\color{#f97316}{C_{-1}} = ${fmtVec(c_init,1)}$$
+</div>`,
+    explanation: `We'll process the same 3-word sequence "I love NLP" to see how the LSTM handles it differently from a vanilla RNN. Note that the LSTM starts with <strong>two</strong> zero vectors: the hidden state h (working memory / short-term) AND the cell state C (long-term storage). Both are blank at the start.`
+  },
+
+  // ===== TIME STEP 0 =====
+  // 5 — FORGET GATE
+  {
+    title: "t=0 &mdash; Forget Gate",
+    subtitle: "What old info to discard? (Nothing yet &mdash; memory is blank)",
+    draw: "t0_forget",
+    math: `<span class="label">Forget gate: should we erase any old memory?</span>
+<div class="eq-row">
+<span class="eq-comment">Concatenate the current word and previous hidden state into one vector</span>
+$$[\\color{#5b9aff}{x_0},\\, \\color{#c084fc}{h_{-1}}] = [${X[0].concat(h_init).map(v=>fmt(v,1)).join(',\\,')}]$$
+</div>
+<div class="eq-row">
+<span class="eq-comment">Multiply by forget weights, apply sigmoid (&sigma; outputs values between 0 and 1)</span>
+$$\\color{#ef4444}{f_0} = \\sigma(W_f \\cdot [x_0, h_{-1}] + b_f) = \\sigma(${fmtVec(z_f[0])}) = \\color{#34d399}{${fmtVec(fs[0])}}$$
+</div>
+<div class="eq-row">
+<span class="eq-comment">Values near 1 = "keep this memory", near 0 = "erase it"</span>
+</div>`,
+    explanation: `The <strong>forget gate</strong> looks at the current input "I" and the previous hidden state, then outputs a value between 0 and 1 for each cell dimension. A value of <strong>1 means "keep everything"</strong> and <strong>0 means "forget everything"</strong>. Since the cell state starts at zero, the forget gate doesn't matter much here &mdash; there's nothing to forget yet!`
+  },
+
+  // 6 — INPUT GATE + CANDIDATE
+  {
+    title: "t=0 &mdash; Input Gate + Candidate",
+    subtitle: "What new info to write into long-term memory?",
+    draw: "t0_input",
+    math: `<span class="label">Input gate + candidate: what to store?</span>
+<div class="eq-row">
+<span class="eq-comment">Input gate: how much of the new info should we actually write? (0 = nothing, 1 = all of it)</span>
+$$\\color{#3b82f6}{i_0} = \\sigma(W_i \\cdot [x_0, h_{-1}] + b_i) = \\sigma(${fmtVec(z_i[0])}) = \\color{#34d399}{${fmtVec(is_[0])}}$$
+</div>
+<div class="eq-row">
+<span class="eq-comment">Candidate: what new information could we potentially add? (tanh gives values in [-1, +1])</span>
+$$\\color{#14b8a6}{\\tilde{C}_0} = \\tanh(W_C \\cdot [x_0, h_{-1}] + b_C) = \\tanh(${fmtVec(z_c[0])}) = \\color{#34d399}{${fmtVec(c_tildes[0])}}$$
+</div>`,
+    explanation: `Two pieces work together: the <strong>input gate</strong> (sigmoid, 0-1) decides <em>how much</em> to write, and the <strong>candidate</strong> (tanh, -1 to +1) decides <em>what</em> to write. Think of it like a document editor: the candidate drafts new text, and the input gate decides which parts to actually insert into the document.`
+  },
+
+  // 7 — CELL STATE UPDATE
+  {
+    title: "t=0 &mdash; Cell State Update",
+    subtitle: "The conveyor belt gets its first item",
+    draw: "t0_cell",
+    math: `<span class="label">Update the long-term memory</span>
+<div class="eq-row">
+<span class="eq-comment">Forget old info (multiply), then add new info (element-wise)</span>
+$$\\color{#f97316}{C_0} = \\color{#ef4444}{f_0} \\odot \\color{#f97316}{C_{-1}} + \\color{#3b82f6}{i_0} \\odot \\color{#14b8a6}{\\tilde{C}_0}$$
+</div>
+<div class="eq-row">
+<span class="eq-comment">Since C_{-1} = [0, 0], the forget term vanishes &mdash; we only add new info</span>
+$$= ${fmtVec(fs[0])} \\odot ${fmtVec(cs[0],1)} \\;+\\; ${fmtVec(is_[0])} \\odot ${fmtVec(c_tildes[0])}$$
+$$= \\color{#34d399}{${fmtVec(cs[1])}}$$
+</div>`,
+    explanation: `The cell state update is beautifully simple: <strong>forget old stuff</strong> (f_0 &odot; C_{-1}) then <strong>add new stuff</strong> (i_0 &odot; C_tilde_0). Since our previous cell state was all zeros, only the new information survives. The conveyor belt now carries its first piece of information about the word "I".`
+  },
+
+  // 8 — OUTPUT GATE + HIDDEN STATE
+  {
+    title: "t=0 &mdash; Output Gate & Hidden State",
+    subtitle: "What to reveal from our long-term memory?",
+    draw: "t0_output",
+    math: `<span class="label">Output gate: read from the cell state</span>
+<div class="eq-row">
+<span class="eq-comment">Output gate: which parts of the cell state should we expose to the outside world?</span>
+$$\\color{#a855f7}{o_0} = \\sigma(W_o \\cdot [x_0, h_{-1}] + b_o) = \\sigma(${fmtVec(z_o[0])}) = \\color{#34d399}{${fmtVec(os[0])}}$$
+</div>
+<div class="eq-row">
+<span class="eq-comment">Hidden state = output gate &times; tanh(cell state). This is the LSTM's "working memory"</span>
+$$\\color{#c084fc}{h_0} = \\color{#a855f7}{o_0} \\odot \\tanh(\\color{#f97316}{C_0}) = ${fmtVec(os[0])} \\odot \\tanh(${fmtVec(cs[1])}) = \\color{#34d399}{${fmtVec(hs[1])}}$$
+</div>`,
+    explanation: `The <strong>output gate</strong> decides which parts of the cell state to reveal as the hidden state. The cell state (long-term memory) can store things the network doesn't need to output right now. Think of it like your brain: you know many things (cell state), but at any moment you only express a relevant subset (hidden state). After seeing "I", the LSTM has both a <strong>long-term memory</strong> C_0 and a <strong>working memory</strong> h_0.`
+  },
+
+  // ===== TIME STEP 1 =====
+  // 9 — FORGET GATE
+  {
+    title: "t=1 &mdash; Forget Gate",
+    subtitle: "Seeing \"love\" &mdash; should we forget anything about \"I\"?",
+    draw: "t1_forget",
+    math: `<span class="label">Forget gate at t=1: what to erase from memory of "I"?</span>
+<div class="eq-row">
+<span class="eq-comment">Now h_0 carries info about "I", so the recurrent input is meaningful</span>
+$$[\\color{#5b9aff}{x_1},\\, \\color{#c084fc}{h_0}] = [${X[1].concat(hs[1]).map(v=>fmt(v,2)).join(',\\,')}]$$
+$$\\color{#ef4444}{f_1} = \\sigma(W_f \\cdot [x_1, h_0] + b_f) = \\color{#34d399}{${fmtVec(fs[1])}}$$
+</div>
+<div class="eq-row">
+<span class="eq-comment">Values around 0.5 mean "partially keep" &mdash; the gate is uncertain</span>
+</div>`,
+    explanation: `When the word "love" arrives, the forget gate examines both the new word AND the memory of "I" (carried in h_0). It outputs values that decide <strong>how much of the "I" memory to retain</strong>. Values near 1 keep the memory intact; values near 0 erase it. This is the LSTM's ability to <strong>selectively forget</strong> &mdash; something vanilla RNNs cannot do.`
+  },
+
+  // 10 — INPUT GATE + CANDIDATE
+  {
+    title: "t=1 &mdash; Input Gate + Candidate",
+    subtitle: "What information about \"love\" to store?",
+    draw: "t1_input",
+    math: `<span class="label">Writing new info about "love"</span>
+<div class="eq-row">
+<span class="eq-comment">How much of the "love" info should we write?</span>
+$$\\color{#3b82f6}{i_1} = \\sigma(W_i \\cdot [x_1, h_0] + b_i) = \\color{#34d399}{${fmtVec(is_[1])}}$$
+</div>
+<div class="eq-row">
+<span class="eq-comment">What is the new candidate info about "love"?</span>
+$$\\color{#14b8a6}{\\tilde{C}_1} = \\tanh(W_C \\cdot [x_1, h_0] + b_C) = \\color{#34d399}{${fmtVec(c_tildes[1])}}$$
+</div>`,
+    explanation: `The input gate and candidate work together again: the candidate proposes what "love" means in context (given that we've seen "I"), and the input gate decides how strongly to write this into long-term memory. Notice the candidate values are different from t=0 because <strong>h_0 now carries context about "I"</strong>.`
+  },
+
+  // 11 — CELL STATE
+  {
+    title: "t=1 &mdash; Cell State Update",
+    subtitle: "Memory evolves: partially forget \"I\", write \"love\"",
+    draw: "t1_cell",
+    math: `<span class="label">Updating the conveyor belt</span>
+<div class="eq-row">
+<span class="eq-comment">Partially erase old memory, then add new info about "love"</span>
+$$\\color{#f97316}{C_1} = \\color{#ef4444}{f_1} \\odot \\color{#f97316}{C_0} \\;+\\; \\color{#3b82f6}{i_1} \\odot \\color{#14b8a6}{\\tilde{C}_1}$$
+$$= ${fmtVec(fs[1])} \\odot ${fmtVec(cs[1])} \\;+\\; ${fmtVec(is_[1])} \\odot ${fmtVec(c_tildes[1])}$$
+$$= \\color{#34d399}{${fmtVec(cs[2])}}$$
+</div>`,
+    explanation: `The cell state now contains a <strong>blend</strong> of information about "I" (partially preserved by the forget gate) and "love" (written by the input gate). This is fundamentally different from a vanilla RNN: the LSTM can <strong>independently control</strong> what to keep and what to add in each dimension of memory.`
+  },
+
+  // 12 — OUTPUT GATE + HIDDEN STATE
+  {
+    title: "t=1 &mdash; Output Gate & Hidden State",
+    subtitle: "What does the network express after \"I love\"?",
+    draw: "t1_output",
+    math: `<span class="label">Reading from updated memory</span>
+<div class="eq-row">
+<span class="eq-comment">Which parts of our "I love" memory are relevant to share right now?</span>
+$$\\color{#a855f7}{o_1} = \\sigma(W_o \\cdot [x_1, h_0] + b_o) = \\color{#34d399}{${fmtVec(os[1])}}$$
+$$\\color{#c084fc}{h_1} = \\color{#a855f7}{o_1} \\odot \\tanh(\\color{#f97316}{C_1}) = \\color{#34d399}{${fmtVec(hs[2])}}$$
+</div>`,
+    explanation: `After processing "I love", the cell state C_1 holds long-term memory of both words. The output gate selects which aspects to expose as h_1. The hidden state h_1 is the LSTM's "working representation" of the phrase "I love" &mdash; it will be passed to the next time step AND can be used for predictions.`
+  },
+
+  // ===== TIME STEP 2 =====
+  // 13 — FORGET + INPUT + CELL
+  {
+    title: "t=2 &mdash; All Gates for \"NLP\"",
+    subtitle: "Processing the final word with full context",
+    draw: "t2_all",
+    math: `<span class="label">Complete gate computation for the final word</span>
+<div class="eq-row">
+<span class="eq-comment">Forget gate: what to erase from "I love" memory?</span>
+$$\\color{#ef4444}{f_2} = \\sigma(W_f \\cdot [x_2, h_1] + b_f) = \\color{#34d399}{${fmtVec(fs[2])}}$$
+</div>
+<div class="eq-row">
+<span class="eq-comment">Input gate + candidate: what to write about "NLP" (in context of "I love")?</span>
+$$\\color{#3b82f6}{i_2} = \\color{#34d399}{${fmtVec(is_[2])}} \\qquad \\color{#14b8a6}{\\tilde{C}_2} = \\color{#34d399}{${fmtVec(c_tildes[2])}}$$
+</div>
+<div class="eq-row">
+<span class="eq-comment">Cell state: the final long-term memory encoding "I love NLP"</span>
+$$\\color{#f97316}{C_2} = \\color{#ef4444}{f_2} \\odot \\color{#f97316}{C_1} + \\color{#3b82f6}{i_2} \\odot \\color{#14b8a6}{\\tilde{C}_2} = \\color{#34d399}{${fmtVec(cs[3])}}$$
+</div>`,
+    explanation: `At the final step, all gates fire together: the forget gate decides what to keep from "I love", the input gate writes info about "NLP" in context, and the cell state C_2 becomes the <strong>complete long-term memory</strong> of the entire sentence "I love NLP".`
+  },
+
+  // 14 — FINAL OUTPUT
+  {
+    title: "t=2 &mdash; Final Output",
+    subtitle: "The LSTM's final hidden state encodes the entire sentence",
+    draw: "t2_output",
+    math: `<span class="label">Final hidden state</span>
+<div class="eq-row">
+<span class="eq-comment">Output gate selects what to reveal from the complete sentence memory</span>
+$$\\color{#a855f7}{o_2} = \\sigma(W_o \\cdot [x_2, h_1] + b_o) = \\color{#34d399}{${fmtVec(os[2])}}$$
+$$\\color{#c084fc}{h_2} = \\color{#a855f7}{o_2} \\odot \\tanh(\\color{#f97316}{C_2}) = \\color{#34d399}{${fmtVec(hs[3])}}$$
+</div>`,
+    explanation: `The final hidden state <strong>h_2</strong> is the LSTM's representation of the complete sentence "I love NLP". Unlike a vanilla RNN, the LSTM could have <strong>selectively preserved information from early words</strong> (via the cell state highway) without it degrading through many tanh/matrix multiplications.`
+  },
+
+  // 15 — FULL UNROLLED
+  {
+    title: "Complete Unrolled View",
+    subtitle: "All states across all time steps",
+    draw: "unrolled",
+    math: `<span class="label">Full Forward Pass Summary</span>
+<div class="eq-row">
+<span class="eq-comment">Cell state evolves smoothly &mdash; the information highway across time</span>
+$$\\color{#f97316}{C_{-1}} = ${fmtVec(cs[0],1)} \\;\\xrightarrow{\\text{"I"}}\\; \\color{#f97316}{C_0} = ${fmtVec(cs[1])} \\;\\xrightarrow{\\text{"love"}}\\; \\color{#f97316}{C_1} = ${fmtVec(cs[2])} \\;\\xrightarrow{\\text{"NLP"}}\\; \\color{#f97316}{C_2} = ${fmtVec(cs[3])}$$
+</div>
+<div class="eq-row">
+<span class="eq-comment">Hidden state: the working memory exposed at each step</span>
+$$\\color{#c084fc}{h_{-1}} = ${fmtVec(hs[0],1)} \\;\\to\\; \\color{#c084fc}{h_0} = ${fmtVec(hs[1])} \\;\\to\\; \\color{#c084fc}{h_1} = ${fmtVec(hs[2])} \\;\\to\\; \\color{#c084fc}{h_2} = ${fmtVec(hs[3])}$$
+</div>`,
+    explanation: `The <strong>cell state</strong> (top row) is the long-term memory highway &mdash; information flows through it with only element-wise operations. The <strong>hidden state</strong> (bottom row) is the working memory that gets used for predictions. Both carry information from the entire sequence, but the cell state preserves it more faithfully over long distances.`
+  },
+
+  // 16 — KEY TAKEAWAYS
+  {
+    title: "Key Takeaways",
+    subtitle: "LSTM vs. vanilla RNN &mdash; why it matters",
+    draw: "summary",
+    math: `<span class="label">LSTM Summary</span>
+<div class="eq-row">
+<span class="eq-comment">The four equations that give LSTMs their power:</span>
+$$\\boxed{\\;\\color{#ef4444}{f_t} = \\sigma(W_f \\cdot [h_{t-1}, x_t] + b_f)\\;}$$
+$$\\boxed{\\;\\color{#3b82f6}{i_t} = \\sigma(W_i \\cdot [h_{t-1}, x_t] + b_i) \\quad \\color{#14b8a6}{\\tilde{C}_t} = \\tanh(W_C \\cdot [h_{t-1}, x_t] + b_C)\\;}$$
+$$\\boxed{\\;\\color{#f97316}{C_t} = \\color{#ef4444}{f_t} \\odot C_{t-1} + \\color{#3b82f6}{i_t} \\odot \\color{#14b8a6}{\\tilde{C}_t}\\;}$$
+$$\\boxed{\\;\\color{#a855f7}{o_t} = \\sigma(W_o \\cdot [h_{t-1}, x_t] + b_o) \\quad \\color{#c084fc}{h_t} = \\color{#a855f7}{o_t} \\odot \\tanh(\\color{#f97316}{C_t})\\;}$$
+</div>`,
+    explanation: `<strong>LSTMs solve the vanishing gradient problem</strong> through the cell state highway. The three gates (forget, input, output) give the network fine-grained control over what to remember and forget. In practice, LSTMs power machine translation, speech recognition, text generation, and more. The next evolution was <strong>GRU</strong> (simplified to 2 gates) and then <strong>Transformers</strong> (attention-based, no recurrence at all).`
+  },
+];
+
+// ===== CANVAS =====
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let currentStep = 0;
+const CANVAS_H = 440;
+
+function resize() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = rect.width * dpr;
+  canvas.height = CANVAS_H * dpr;
+  canvas.style.height = CANVAS_H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+resize();
+window.addEventListener('resize', () => { resize(); draw(); });
+
+// ===== PARTICLES =====
+let particles = [];
+let animFrame = null;
+let lastTime = 0;
+
+function spawnParticles(paths, color, count) {
+  paths.forEach(p => {
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x1: p.x1, y1: p.y1, x2: p.x2, y2: p.y2,
+        progress: Math.random(), speed: 0.3 + Math.random() * 0.4,
+        color: color, size: 2 + Math.random() * 2,
+      });
+    }
+  });
+}
+
+function updateParticles(dt) { particles.forEach(p => { p.progress += p.speed * dt; if (p.progress > 1) p.progress -= 1; }); }
+
+function drawParticles() {
+  particles.forEach(p => {
+    const x = p.x1 + (p.x2 - p.x1) * p.progress;
+    const y = p.y1 + (p.y2 - p.y1) * p.progress;
+    const alpha = Math.sin(p.progress * Math.PI);
+    ctx.beginPath(); ctx.arc(x, y, p.size, 0, Math.PI * 2);
+    ctx.fillStyle = p.color; ctx.globalAlpha = alpha * 0.8; ctx.fill(); ctx.globalAlpha = 1;
+    ctx.beginPath(); ctx.arc(x, y, p.size * 3, 0, Math.PI * 2);
+    ctx.fillStyle = p.color; ctx.globalAlpha = alpha * 0.15; ctx.fill(); ctx.globalAlpha = 1;
+  });
+}
+
+function animate(time) {
+  const dt = Math.min((time - lastTime) / 1000, 0.05);
+  lastTime = time;
+  updateParticles(dt);
+  drawScene();
+  drawParticles();
+  animFrame = requestAnimationFrame(animate);
+}
+function startAnimation() { if (animFrame) cancelAnimationFrame(animFrame); lastTime = performance.now(); animFrame = requestAnimationFrame(animate); }
+function stopAnimation() { if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; } particles = []; }
+
+// ===== DRAWING HELPERS =====
+function hexToRGBA(hex, alpha) {
+  hex = hex.replace('#','');
+  if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+  return `rgba(${parseInt(hex.substr(0,2),16)},${parseInt(hex.substr(2,2),16)},${parseInt(hex.substr(4,2),16)},${alpha})`;
+}
+
+function drawRoundedRect(x, y, w, h, r, fillColor, strokeColor, lineWidth) {
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, r);
+  if (fillColor) { ctx.fillStyle = fillColor; ctx.fill(); }
+  if (strokeColor) { ctx.strokeStyle = strokeColor; ctx.lineWidth = lineWidth || 1; ctx.stroke(); }
+}
+
+function drawGateBox(x, y, w, h, label, sublabel, color, active, value) {
+  const r = 10;
+  ctx.save();
+  if (active) { ctx.shadowColor = color; ctx.shadowBlur = 15; }
+  drawRoundedRect(x - w/2, y - h/2, w, h, r, hexToRGBA(color, active ? 0.2 : 0.08), color, active ? 2.5 : 1);
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = color;
+  ctx.font = `bold 13px "Space Grotesk"`;
+  ctx.textAlign = 'center';
+  ctx.fillText(label, x, y - (value ? 6 : 2));
+  if (sublabel) {
+    ctx.font = '9px "JetBrains Mono"';
+    ctx.fillStyle = hexToRGBA(color, 0.7);
+    ctx.fillText(sublabel, x, y + 8);
+  }
+  if (value) {
+    ctx.font = '10px "JetBrains Mono"';
+    ctx.fillStyle = C.text;
+    ctx.fillText(value, x, y + (sublabel ? 22 : 12));
+  }
+  ctx.restore();
+}
+
+function drawArrow(x1, y1, x2, y2, color, active, dashed) {
+  const dx = x2-x1, dy = y2-y1, len = Math.sqrt(dx*dx+dy*dy);
+  const nx = dx/len, ny = dy/len;
+  ctx.save();
+  if (active) { ctx.shadowColor = color; ctx.shadowBlur = 6; }
+  ctx.beginPath();
+  if (dashed) ctx.setLineDash([5,4]);
+  ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+  ctx.strokeStyle = active ? color : hexToRGBA(color, 0.35);
+  ctx.lineWidth = active ? 2 : 1; ctx.stroke(); ctx.setLineDash([]);
+  ctx.shadowBlur = 0;
+  const ah = 7, angle = Math.atan2(dy, dx);
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2-ah*Math.cos(angle-0.4), y2-ah*Math.sin(angle-0.4));
+  ctx.lineTo(x2-ah*Math.cos(angle+0.4), y2-ah*Math.sin(angle+0.4));
+  ctx.closePath(); ctx.fillStyle = active ? color : hexToRGBA(color, 0.35); ctx.fill();
+  ctx.restore();
+}
+
+function drawCellStateBar(x, y, w, color, label, value, active) {
+  ctx.save();
+  if (active) { ctx.shadowColor = color; ctx.shadowBlur = 12; }
+  drawRoundedRect(x - w/2, y - 16, w, 32, 16, hexToRGBA(color, active ? 0.18 : 0.08), color, active ? 2.5 : 1);
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = color;
+  ctx.font = 'bold 11px "JetBrains Mono"';
+  ctx.textAlign = 'center';
+  ctx.fillText(label, x, y - 2);
+  if (value) {
+    ctx.font = '9px "JetBrains Mono"';
+    ctx.fillStyle = C.text;
+    ctx.fillText(value, x, y + 12);
+  }
+  ctx.restore();
+}
+
+function drawOperator(x, y, symbol, color, active) {
+  const r = 14;
+  ctx.save();
+  if (active) { ctx.shadowColor = color; ctx.shadowBlur = 8; }
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2);
+  ctx.fillStyle = hexToRGBA(color, active ? 0.2 : 0.08);
+  ctx.fill();
+  ctx.strokeStyle = color; ctx.lineWidth = active ? 2 : 1; ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = color;
+  ctx.font = 'bold 14px "JetBrains Mono"';
+  ctx.textAlign = 'center';
+  ctx.fillText(symbol, x, y + 5);
+  ctx.restore();
+}
+
+// ===== MAIN SCENES =====
+
+function drawWhyLSTM() {
+  const W = canvas.width / (window.devicePixelRatio || 1);
+  const cx = W / 2;
+
+  // RNN chain showing signal decay
+  const startX = cx - 220, y = 120, gap = 90;
+  const colors = ['rgba(108,156,255,1)', 'rgba(108,156,255,0.7)', 'rgba(108,156,255,0.4)', 'rgba(108,156,255,0.15)', 'rgba(108,156,255,0.06)'];
+  const labels = ['h₀', 'h₁', 'h₂', 'h₃', 'h₄'];
+  const sizes = [22, 19, 15, 11, 8];
+
+  ctx.fillStyle = C.dim;
+  ctx.font = '13px "Space Grotesk"';
+  ctx.textAlign = 'center';
+  ctx.fillText('Vanilla RNN: signal fades over time steps', cx, 50);
+
+  for (let i = 0; i < 5; i++) {
+    const x = startX + i * gap;
+    ctx.beginPath(); ctx.arc(x, y, sizes[i], 0, Math.PI*2);
+    ctx.fillStyle = colors[i]; ctx.fill();
+    ctx.fillStyle = i < 3 ? C.text : C.dim;
+    ctx.font = '11px "JetBrains Mono"';
+    ctx.textAlign = 'center';
+    ctx.fillText(labels[i], x, y + sizes[i] + 16);
+    if (i < 4) {
+      drawArrow(x + sizes[i] + 4, y, startX + (i+1)*gap - sizes[i+1] - 6, y, hexToRGBA(C.accent, 0.3 + 0.7*(1 - i/4)), i < 2);
+    }
+  }
+
+  // Gradient arrow showing decay
+  const gradY = y + 55;
+  ctx.fillStyle = C.dim;
+  ctx.font = '11px "DM Sans"';
+  ctx.textAlign = 'left';
+  ctx.fillText('Signal strength:', startX - 10, gradY);
+  const grd = ctx.createLinearGradient(startX + 110, 0, startX + 110 + 250, 0);
+  grd.addColorStop(0, C.accent); grd.addColorStop(1, hexToRGBA(C.accent, 0.05));
+  drawRoundedRect(startX + 110, gradY - 8, 250, 12, 6, grd, null);
+  ctx.fillStyle = C.accent; ctx.font = '10px "JetBrains Mono"';
+  ctx.textAlign = 'left'; ctx.fillText('Strong', startX + 112, gradY + 18);
+  ctx.textAlign = 'right'; ctx.fillText('Vanished!', startX + 358, gradY + 18);
+
+  // LSTM solution below
+  const y2 = 270;
+  ctx.fillStyle = C.cell;
+  ctx.font = 'bold 13px "Space Grotesk"';
+  ctx.textAlign = 'center';
+  ctx.fillText('LSTM solution: a cell state highway preserves information', cx, y2 - 30);
+
+  // Cell state highway
+  const cellY = y2 + 20;
+  drawRoundedRect(startX - 10, cellY - 12, gap * 4 + 40, 24, 12, hexToRGBA(C.cell, 0.12), C.cell, 2);
+  for (let i = 0; i < 5; i++) {
+    const x = startX + i * gap;
+    ctx.beginPath(); ctx.arc(x, cellY, 6, 0, Math.PI*2);
+    ctx.fillStyle = C.cell; ctx.fill();
+  }
+
+  ctx.fillStyle = C.cell; ctx.font = '10px "JetBrains Mono"'; ctx.textAlign = 'center';
+  ctx.fillText('Cell state: C₋₁ → C₀ → C₁ → C₂ → C₃', cx, cellY + 30);
+  ctx.fillStyle = C.accent3; ctx.font = '11px "DM Sans"';
+  ctx.fillText('Gradients flow freely through the cell state!', cx, cellY + 52);
+
+  // Gate indicators
+  const gateY = cellY + 76;
+  const gateNames = ['Forget', 'Input', 'Output'];
+  const gateColors = [C.forget, C.gateIn, C.gateOut];
+  const gateW = 100;
+  for (let i = 0; i < 3; i++) {
+    const gx = cx - (1 - i) * 130;
+    drawGateBox(gx, gateY, gateW, 30, gateNames[i], null, gateColors[i], true);
+  }
+
+  return [];
+}
+
+function drawArchitectureScene() {
+  const W = canvas.width / (window.devicePixelRatio || 1);
+  const cx = W / 2;
+  const paths = [];
+
+  // Cell state highway
+  const cellY = 60;
+  drawRoundedRect(cx - 200, cellY - 14, 400, 28, 14, hexToRGBA(C.cell, 0.1), C.cell, 2);
+  ctx.fillStyle = C.cell; ctx.font = 'bold 12px "Space Grotesk"';
+  ctx.textAlign = 'center'; ctx.fillText('Cell State (Long-Term Memory Highway)', cx, cellY + 4);
+
+  // Draw arrows for cell state flow
+  drawArrow(cx - 210, cellY, cx - 200, cellY, C.cell, true);
+  drawArrow(cx + 200, cellY, cx + 210, cellY, C.cell, true);
+  ctx.fillStyle = C.dim; ctx.font = '10px "JetBrains Mono"'; ctx.textAlign = 'left';
+  ctx.fillText('C_{t-1}', cx - 250, cellY + 4);
+  ctx.textAlign = 'right'; ctx.fillText('C_t', cx + 250, cellY + 4);
+
+  // Gates row
+  const gateY = 175;
+  const gateW = 100, gateH = 55;
+  const forgetX = cx - 150, inputX = cx, outputX = cx + 150;
+
+  drawGateBox(forgetX, gateY, gateW, gateH, 'Forget', 'f_t = σ(...)', C.forget, true);
+  drawGateBox(inputX, gateY, gateW, gateH, 'Input', 'i_t = σ(...)', C.gateIn, true);
+  drawGateBox(outputX, gateY, gateW, gateH, 'Output', 'o_t = σ(...)', C.gateOut, true);
+
+  // Candidate
+  const candY = 250;
+  drawGateBox(inputX, candY, gateW, 45, 'Candidate', 'C̃_t = tanh(...)', C.candidate, true);
+
+  // Operators on cell state
+  const mulX = forgetX, addX = inputX;
+  drawOperator(mulX, cellY + 40, '×', C.forget, true);
+  drawOperator(addX, cellY + 40, '+', C.gateIn, true);
+
+  // Connect forget gate to multiply
+  drawArrow(forgetX, gateY - gateH/2, mulX, cellY + 55, C.forget, true);
+  paths.push({x1: forgetX, y1: gateY - gateH/2, x2: mulX, y2: cellY + 55});
+
+  // Connect input gate and candidate to add
+  drawArrow(inputX, gateY - gateH/2, addX - 10, cellY + 55, C.gateIn, true);
+  drawArrow(inputX, candY - 22, addX + 10, cellY + 55, C.candidate, true);
+
+  // Connect output gate to hidden
+  const hiddenY = 330;
+  drawArrow(outputX, gateY + gateH/2, outputX, hiddenY - 10, C.gateOut, true);
+  drawGateBox(outputX, hiddenY + 15, 80, 35, 'h_t', 'output', C.hidden, true);
+
+  // tanh on cell output
+  drawOperator(outputX - 55, hiddenY + 15, 'tanh', C.cell, true);
+  drawArrow(cx + 90, cellY, outputX - 55, hiddenY, C.cell, true, true);
+
+  // Input below
+  const inY = 380;
+  drawGateBox(cx, inY, 180, 30, '[x_t , h_{t-1}]', 'concatenated input', C.input, true);
+  drawArrow(cx - 60, inY - 15, forgetX, gateY + gateH/2, C.input, true, true);
+  drawArrow(cx, inY - 15, inputX, candY + 22, C.input, true, true);
+  drawArrow(cx + 60, inY - 15, outputX, gateY + gateH/2, C.input, true, true);
+
+  return paths;
+}
+
+function drawConveyor() {
+  const W = canvas.width / (window.devicePixelRatio || 1);
+  const cx = W / 2;
+  const paths = [];
+
+  // ===== TOP: The conveyor belt diagram =====
+  const beltY = 75;
+  const beltW = Math.min(520, W - 80);
+  const beltLeft = cx - beltW/2;
+  const beltRight = cx + beltW/2;
+
+  // Title
+  ctx.fillStyle = C.cell;
+  ctx.font = 'bold 15px "Space Grotesk"';
+  ctx.textAlign = 'center';
+  ctx.fillText('Cell State = A Conveyor Belt Through Time', cx, 30);
+
+  // Main belt (thick horizontal bar)
+  const beltH = 10;
+  const grd = ctx.createLinearGradient(beltLeft, 0, beltRight, 0);
+  grd.addColorStop(0, hexToRGBA(C.cell, 0.35));
+  grd.addColorStop(0.5, hexToRGBA(C.cell, 0.5));
+  grd.addColorStop(1, hexToRGBA(C.cell, 0.35));
+  drawRoundedRect(beltLeft, beltY - beltH/2, beltW, beltH, 5, grd, C.cell, 2);
+  paths.push({x1: beltLeft, y1: beltY, x2: beltRight, y2: beltY});
+
+  // Belt chevrons (motion indicators)
+  ctx.strokeStyle = hexToRGBA(C.cell, 0.3);
+  ctx.lineWidth = 1.5;
+  for (let i = 0; i < 8; i++) {
+    const chX = beltLeft + 35 + i * (beltW - 60) / 7;
+    ctx.beginPath();
+    ctx.moveTo(chX - 4, beltY - 3);
+    ctx.lineTo(chX + 2, beltY);
+    ctx.lineTo(chX - 4, beltY + 3);
+    ctx.stroke();
+  }
+
+  // State nodes on the belt
+  const nodePositions = [
+    { x: beltLeft + 20, label: 'C_{t-1}', sub: 'old memory', color: C.cell },
+    { x: beltRight - 20, label: 'C_t', sub: 'new memory', color: C.cell },
+  ];
+  nodePositions.forEach(n => {
+    ctx.beginPath(); ctx.arc(n.x, beltY, 12, 0, Math.PI*2);
+    ctx.fillStyle = hexToRGBA(n.color, 0.25); ctx.fill();
+    ctx.strokeStyle = n.color; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = n.color; ctx.font = 'bold 10px "JetBrains Mono"'; ctx.textAlign = 'center';
+    ctx.fillText(n.label, n.x, beltY - 20);
+    ctx.fillStyle = C.dim; ctx.font = '9px "DM Sans"';
+    ctx.fillText(n.sub, n.x, beltY + 24);
+  });
+
+  // Operation zones on the belt
+  const zoneW = 80;
+  // Forget zone (left-center)
+  const forgetZoneX = beltLeft + beltW * 0.33;
+  drawRoundedRect(forgetZoneX - zoneW/2, beltY - 28, zoneW, 22, 6,
+    hexToRGBA(C.forget, 0.15), C.forget, 1.5);
+  drawOperator(forgetZoneX, beltY, '×', C.forget, true);
+  ctx.fillStyle = C.forget; ctx.font = 'bold 10px "JetBrains Mono"'; ctx.textAlign = 'center';
+  ctx.fillText('FORGET', forgetZoneX, beltY - 33);
+
+  // Add zone (right-center)
+  const addZoneX = beltLeft + beltW * 0.67;
+  drawRoundedRect(addZoneX - zoneW/2, beltY - 28, zoneW, 22, 6,
+    hexToRGBA(C.gateIn, 0.15), C.gateIn, 1.5);
+  drawOperator(addZoneX, beltY, '+', C.gateIn, true);
+  ctx.fillStyle = C.gateIn; ctx.font = 'bold 10px "JetBrains Mono"'; ctx.textAlign = 'center';
+  ctx.fillText('WRITE', addZoneX, beltY - 33);
+
+  // Arrows feeding into the operators from below
+  const feedY = beltY + 50;
+
+  // Forget gate feeds into × operator
+  drawArrow(forgetZoneX, feedY + 8, forgetZoneX, beltY + 16, C.forget, true);
+  drawRoundedRect(forgetZoneX - 40, feedY + 10, 80, 28, 8,
+    hexToRGBA(C.forget, 0.12), C.forget, 1.5);
+  ctx.fillStyle = C.forget; ctx.font = 'bold 10px "JetBrains Mono"'; ctx.textAlign = 'center';
+  ctx.fillText('f_t (gate)', forgetZoneX, feedY + 28);
+
+  // Input gate × candidate feeds into + operator
+  drawArrow(addZoneX, feedY + 8, addZoneX, beltY + 16, C.gateIn, true);
+  drawRoundedRect(addZoneX - 48, feedY + 10, 96, 28, 8,
+    hexToRGBA(C.gateIn, 0.12), C.gateIn, 1.5);
+  ctx.fillStyle = C.gateIn; ctx.font = 'bold 10px "JetBrains Mono"'; ctx.textAlign = 'center';
+  ctx.fillText('i_t × C̃_t', addZoneX, feedY + 28);
+
+  // Output gate reads from end
+  const readX = beltRight - 60;
+  const readY = beltY + 50;
+  drawArrow(readX, beltY + 6, readX, readY, C.gateOut, true, true);
+  drawRoundedRect(readX - 40, readY + 4, 80, 28, 8,
+    hexToRGBA(C.gateOut, 0.12), C.gateOut, 1.5);
+  ctx.fillStyle = C.gateOut; ctx.font = 'bold 10px "JetBrains Mono"'; ctx.textAlign = 'center';
+  ctx.fillText('o_t (read)', readX, readY + 22);
+
+  // ===== BOTTOM: Four gate explanation cards =====
+  const detY = 210;
+  const gateInfo = [
+    { name: 'Forget Gate', symbol: 'f_t', act: 'sigmoid', range: '0 to 1',
+      color: C.forget, analogy: 'Like an eraser:', detail: '0 = erase all, 1 = keep all' },
+    { name: 'Input Gate', symbol: 'i_t', act: 'sigmoid', range: '0 to 1',
+      color: C.gateIn, analogy: 'Like a volume knob:', detail: '0 = mute, 1 = full write' },
+    { name: 'Candidate', symbol: 'C̃_t', act: 'tanh', range: '-1 to +1',
+      color: C.candidate, analogy: 'Like a draft text:', detail: 'New info to potentially add' },
+    { name: 'Output Gate', symbol: 'o_t', act: 'sigmoid', range: '0 to 1',
+      color: C.gateOut, analogy: 'Like a spotlight:', detail: '0 = hide, 1 = reveal' },
+  ];
+
+  const totalCardsW = Math.min(W - 40, 600);
+  const cardGap = 10;
+  const cardW = (totalCardsW - cardGap * 3) / 4;
+  const cardsStartX = cx - totalCardsW / 2;
+  const cardH = 180;
+
+  gateInfo.forEach((g, i) => {
+    const gx = cardsStartX + i * (cardW + cardGap) + cardW / 2;
+
+    // Card background
+    drawRoundedRect(gx - cardW/2, detY, cardW, cardH, 10,
+      hexToRGBA(g.color, 0.06), hexToRGBA(g.color, 0.35), 1.5);
+
+    // Top accent bar
+    drawRoundedRect(gx - cardW/2, detY, cardW, 4, [10,10,0,0], g.color, null);
+
+    ctx.textAlign = 'center';
+
+    // Gate name
+    ctx.fillStyle = g.color;
+    ctx.font = 'bold 12px "Space Grotesk"';
+    ctx.fillText(g.name, gx, detY + 22);
+
+    // Symbol (big)
+    ctx.font = 'bold 20px "JetBrains Mono"';
+    ctx.fillText(g.symbol, gx, detY + 50);
+
+    // Activation + range
+    ctx.fillStyle = C.dim;
+    ctx.font = '10px "JetBrains Mono"';
+    ctx.fillText(g.act + ' \u2192 [' + g.range + ']', gx, detY + 70);
+
+    // Divider line
+    ctx.beginPath();
+    ctx.moveTo(gx - cardW/2 + 10, detY + 82);
+    ctx.lineTo(gx + cardW/2 - 10, detY + 82);
+    ctx.strokeStyle = hexToRGBA(g.color, 0.2);
+    ctx.lineWidth = 1; ctx.stroke();
+
+    // Analogy
+    ctx.fillStyle = g.color;
+    ctx.font = 'bold 10px "DM Sans"';
+    ctx.fillText(g.analogy, gx, detY + 102);
+
+    // Detail
+    ctx.fillStyle = C.text;
+    ctx.font = '10px "DM Sans"';
+    const parts = g.detail.split(', ');
+    parts.forEach((p, pi) => {
+      ctx.fillText(p, gx, detY + 122 + pi * 16);
+    });
+
+    // Visual indicator bar
+    const barY = detY + cardH - 20;
+    const barW = cardW - 20;
+    if (g.act === 'sigmoid') {
+      // gradient from 0 to 1
+      const bgrd = ctx.createLinearGradient(gx - barW/2, 0, gx + barW/2, 0);
+      bgrd.addColorStop(0, hexToRGBA(g.color, 0.05));
+      bgrd.addColorStop(1, hexToRGBA(g.color, 0.4));
+      drawRoundedRect(gx - barW/2, barY - 4, barW, 8, 4, bgrd, null);
+      ctx.fillStyle = C.dim; ctx.font = '8px "JetBrains Mono"';
+      ctx.textAlign = 'left'; ctx.fillText('0', gx - barW/2, barY + 14);
+      ctx.textAlign = 'right'; ctx.fillText('1', gx + barW/2, barY + 14);
+    } else {
+      // gradient from -1 through 0 to +1
+      const bgrd = ctx.createLinearGradient(gx - barW/2, 0, gx + barW/2, 0);
+      bgrd.addColorStop(0, hexToRGBA(C.accent2, 0.3));
+      bgrd.addColorStop(0.5, hexToRGBA(g.color, 0.05));
+      bgrd.addColorStop(1, hexToRGBA(g.color, 0.4));
+      drawRoundedRect(gx - barW/2, barY - 4, barW, 8, 4, bgrd, null);
+      ctx.fillStyle = C.dim; ctx.font = '8px "JetBrains Mono"';
+      ctx.textAlign = 'left'; ctx.fillText('-1', gx - barW/2, barY + 14);
+      ctx.textAlign = 'center'; ctx.fillText('0', gx, barY + 14);
+      ctx.textAlign = 'right'; ctx.fillText('+1', gx + barW/2, barY + 14);
+    }
+    ctx.textAlign = 'center';
+  });
+
+  return paths;
+}
+
+function drawParamsScene() {
+  const W = canvas.width / (window.devicePixelRatio || 1);
+  const cx = W / 2;
+
+  const matrices = [
+    { name: 'W_f', color: C.forget, label: 'Forget', data: Wf },
+    { name: 'W_i', color: C.gateIn, label: 'Input', data: Wi },
+    { name: 'W_C', color: C.candidate, label: 'Candidate', data: Wc },
+    { name: 'W_o', color: C.gateOut, label: 'Output', data: Wo },
+  ];
+
+  const gap = Math.min(145, (W - 80) / 4);
+  const startX = cx - gap * 1.5;
+
+  ctx.fillStyle = C.dim;
+  ctx.font = '11px "DM Sans"';
+  ctx.textAlign = 'center';
+  ctx.fillText('Each gate has a 2×4 weight matrix (2 hidden × (2 input + 2 hidden))', cx, 30);
+
+  matrices.forEach((mat, mi) => {
+    const bx = startX + mi * gap;
+    const by = 80;
+
+    ctx.fillStyle = mat.color;
+    ctx.font = 'bold 13px "JetBrains Mono"';
+    ctx.textAlign = 'center';
+    ctx.fillText(mat.name, bx, by - 10);
+    ctx.fillStyle = C.dim; ctx.font = '10px "DM Sans"';
+    ctx.fillText(mat.label + ' gate', bx, by + 5);
+
+    // Draw 2×4 grid
+    const cellW = 28, cellH = 32;
+    for (let r = 0; r < 2; r++) {
+      for (let c = 0; c < 4; c++) {
+        const gx = bx - cellW * 2 + c * cellW + cellW/2;
+        const gy = by + 25 + r * cellH;
+        const val = mat.data[r][c];
+        ctx.fillStyle = hexToRGBA(mat.color, 0.05 + Math.abs(val) * 0.2);
+        ctx.beginPath(); ctx.roundRect(gx - cellW/2 + 2, gy - cellH/2 + 2, cellW - 4, cellH - 4, 4); ctx.fill();
+        ctx.strokeStyle = hexToRGBA(mat.color, 0.3); ctx.lineWidth = 1; ctx.stroke();
+        ctx.fillStyle = val >= 0 ? C.text : C.accent2;
+        ctx.font = 'bold 11px "JetBrains Mono"'; ctx.textAlign = 'center';
+        ctx.fillText(val.toFixed(1), gx, gy + 4);
+      }
+    }
+  });
+
+  // Biases
+  const biasY = 210;
+  ctx.fillStyle = C.dim; ctx.font = '11px "JetBrains Mono"'; ctx.textAlign = 'center';
+  ctx.fillText('All biases = [0.0, 0.0] (for simplicity)', cx, biasY);
+
+  // Size diagram
+  const szY = 260;
+  ctx.fillStyle = C.accent;
+  ctx.font = 'bold 13px "Space Grotesk"';
+  ctx.fillText('Dimensions', cx, szY);
+
+  const boxes = [
+    { label: 'Input x_t', size: '2', color: C.input },
+    { label: 'Hidden h_t', size: '2', color: C.hidden },
+    { label: 'Cell C_t', size: '2', color: C.cell },
+    { label: 'Concat [x,h]', size: '4', color: C.dim },
+  ];
+
+  boxes.forEach((b, i) => {
+    const bx = cx + (i - 1.5) * 130;
+    const by = szY + 30;
+    drawRoundedRect(bx - 50, by - 15, 100, 50, 8, hexToRGBA(b.color, 0.08), b.color, 1.5);
+    ctx.fillStyle = b.color; ctx.font = '11px "DM Sans"'; ctx.textAlign = 'center';
+    ctx.fillText(b.label, bx, by + 4);
+    ctx.font = 'bold 16px "JetBrains Mono"';
+    ctx.fillText(b.size, bx, by + 24);
+  });
+
+  // Total params
+  ctx.fillStyle = C.accent3;
+  ctx.font = 'bold 12px "Space Grotesk"';
+  ctx.fillText('Total: 4 × (2×4) + 4 × 2 = 40 learnable parameters', cx, szY + 100);
+
+  return [];
+}
+
+function drawInputsScene() {
+  const W = canvas.width / (window.devicePixelRatio || 1);
+  const cx = W / 2;
+
+  const words = ['"I"', '"love"', '"NLP"'];
+  const gap = Math.min(160, (W - 80) / 3);
+  const startX = cx - gap;
+
+  for (let t = 0; t < 3; t++) {
+    const bx = startX + t * gap;
+    const by = 70;
+
+    drawRoundedRect(bx - 55, by - 20, 110, 130, 10, hexToRGBA(C.input, 0.08), hexToRGBA(C.input, 0.3), 1);
+    ctx.fillStyle = C.accent; ctx.font = 'bold 12px "Space Grotesk"'; ctx.textAlign = 'center';
+    ctx.fillText(`t = ${t}`, bx, by);
+    ctx.fillStyle = C.text; ctx.font = '14px "DM Sans"';
+    ctx.fillText(words[t], bx, by + 24);
+    ctx.fillStyle = C.input; ctx.font = 'bold 13px "JetBrains Mono"';
+    ctx.fillText(`x${t}`, bx, by + 50);
+    ctx.font = '12px "JetBrains Mono"';
+    ctx.fillText(fmtVec(X[t], 1), bx, by + 72);
+
+    if (t < 2) {
+      ctx.fillStyle = hexToRGBA(C.dim, 0.5); ctx.font = '16px sans-serif';
+      ctx.fillText('→', bx + gap/2, by + 40);
+    }
+  }
+
+  // Initial states
+  const iy = 260;
+  const stateW = 180;
+  // Hidden
+  drawRoundedRect(cx - stateW - 20, iy - 15, stateW, 55, 10, hexToRGBA(C.hidden, 0.08), hexToRGBA(C.hidden, 0.3), 1);
+  ctx.fillStyle = C.hidden; ctx.font = 'bold 12px "JetBrains Mono"'; ctx.textAlign = 'center';
+  ctx.fillText('h₋₁ (hidden)', cx - stateW/2 - 20, iy + 5);
+  ctx.font = '12px "JetBrains Mono"'; ctx.fillText(fmtVec(h_init, 1), cx - stateW/2 - 20, iy + 26);
+  // Cell
+  drawRoundedRect(cx + 20, iy - 15, stateW, 55, 10, hexToRGBA(C.cell, 0.08), hexToRGBA(C.cell, 0.3), 1);
+  ctx.fillStyle = C.cell; ctx.font = 'bold 12px "JetBrains Mono"'; ctx.textAlign = 'center';
+  ctx.fillText('C₋₁ (cell)', cx + stateW/2 + 20, iy + 5);
+  ctx.font = '12px "JetBrains Mono"'; ctx.fillText(fmtVec(c_init, 1), cx + stateW/2 + 20, iy + 26);
+
+  ctx.fillStyle = C.dim; ctx.font = '11px "DM Sans"'; ctx.textAlign = 'center';
+  ctx.fillText('Both start at zero — blank slate, no prior memory', cx, iy + 58);
+
+  return [];
+}
+
+function drawLSTMStep(t, phase) {
+  // phase: 'forget', 'input', 'cell', 'output', 'all'
+  const W = canvas.width / (window.devicePixelRatio || 1);
+  const cx = W / 2;
+  const paths = [];
+
+  const words = ['"I"', '"love"', '"NLP"'];
+
+  // Cell state highway at top
+  const cellY = 50;
+  const cellW = 260;
+  const prevCellActive = phase === 'cell' || phase === 'all';
+  const nextCellActive = phase === 'cell' || phase === 'all';
+
+  drawCellStateBar(cx - 120, cellY, 100, C.cell, `C_${t-1}`, fmtVec(cs[t], 2), prevCellActive);
+  drawCellStateBar(cx + 120, cellY, 100, C.cell, `C_${t}`, phase === 'cell' || phase === 'output' || phase === 'all' ? fmtVec(cs[t+1], 2) : '?', nextCellActive);
+
+  // Arrow between cells
+  drawArrow(cx - 65, cellY, cx + 65, cellY, C.cell, prevCellActive);
+  if (prevCellActive) paths.push({x1: cx-65, y1: cellY, x2: cx+65, y2: cellY});
+
+  // Operators
+  const mulX = cx - 30, addX = cx + 30;
+  drawOperator(mulX, cellY, '×', C.forget, phase === 'forget' || phase === 'cell' || phase === 'all');
+  drawOperator(addX, cellY, '+', C.gateIn, phase === 'input' || phase === 'cell' || phase === 'all');
+
+  // Gates
+  const gateY = 180;
+  const gateW = 105, gateH = 65;
+  const forgetActive = phase === 'forget' || phase === 'all';
+  const inputActive = phase === 'input' || phase === 'all';
+  const outputActive = phase === 'output' || phase === 'all';
+
+  drawGateBox(cx - 170, gateY, gateW, gateH, 'Forget Gate', 'f_t = σ(...)',
+    C.forget, forgetActive, forgetActive ? fmtVec(fs[t], 3) : null);
+  drawGateBox(cx, gateY, gateW, gateH, 'Input Gate', 'i_t = σ(...)',
+    C.gateIn, inputActive, inputActive ? fmtVec(is_[t], 3) : null);
+  drawGateBox(cx + 170, gateY, gateW, gateH, 'Output Gate', 'o_t = σ(...)',
+    C.gateOut, outputActive, outputActive ? fmtVec(os[t], 3) : null);
+
+  // Candidate below input gate
+  const candY = gateY + 75;
+  drawGateBox(cx, candY, gateW, 50, 'Candidate', 'C̃_t = tanh(...)',
+    C.candidate, inputActive, inputActive ? fmtVec(c_tildes[t], 3) : null);
+
+  // Connect gates to operators
+  if (forgetActive) {
+    drawArrow(cx - 170, gateY - gateH/2, mulX, cellY + 16, C.forget, true);
+    paths.push({x1: cx-170, y1: gateY - gateH/2, x2: mulX, y2: cellY + 16});
+  }
+  if (inputActive) {
+    drawArrow(cx - 10, gateY - gateH/2, addX - 5, cellY + 16, C.gateIn, true);
+    drawArrow(cx + 10, candY - 24, addX + 5, cellY + 16, C.candidate, true);
+  }
+
+  // Output gate connection
+  if (outputActive) {
+    const hY = 330;
+    drawArrow(cx + 170, gateY + gateH/2, cx + 170, hY - 18, C.gateOut, true);
+    // tanh(C_t) feeds into h_t
+    drawArrow(cx + 80, cellY, cx + 130, hY - 18, C.cell, true, true);
+    drawGateBox(cx + 170, hY + 5, 110, 40, `h_${t}`, fmtVec(hs[t+1], 4), C.hidden, true);
+    paths.push({x1: cx+170, y1: gateY + gateH/2, x2: cx+170, y2: hY - 18});
+  }
+
+  // Input at bottom
+  const inY = 375;
+  drawGateBox(cx - 40, inY, 160, 35, `[x_${t}, h_${t-1}]`, `${words[t]} + prev memory`, C.input, true);
+
+  // Connect input to gates
+  drawArrow(cx - 80, inY - 18, cx - 170, gateY + gateH/2, C.input, true, true);
+  drawArrow(cx - 40, inY - 18, cx, candY + 26, C.input, true, true);
+  drawArrow(cx + 20, inY - 18, cx + 170, gateY + gateH/2, C.input, true, true);
+
+  // Step label
+  ctx.fillStyle = C.accent;
+  ctx.font = 'bold 11px "Space Grotesk"';
+  ctx.textAlign = 'left';
+  ctx.fillText(`t = ${t}  •  word: ${words[t]}`, 20, 30);
+
+  return paths;
+}
+
+function drawUnrolledScene() {
+  const W = canvas.width / (window.devicePixelRatio || 1);
+  const cx = W / 2;
+
+  const colW = Math.min(180, (W - 100) / 3);
+  const startX = cx - colW;
+  const words = ['"I"', '"love"', '"NLP"'];
+
+  // Cell state highway
+  const cellY = 55;
+  drawRoundedRect(startX - colW * 0.5, cellY - 10, colW * 3, 20, 10, hexToRGBA(C.cell, 0.08), C.cell, 1.5);
+  ctx.fillStyle = C.cell; ctx.font = '10px "JetBrains Mono"'; ctx.textAlign = 'center';
+
+  // Cell state values above
+  for (let t = -1; t < 3; t++) {
+    const x = t === -1 ? startX - colW * 0.45 : startX + t * colW;
+    const val = cs[t + 1];
+    ctx.beginPath(); ctx.arc(x, cellY, 6, 0, Math.PI*2);
+    ctx.fillStyle = C.cell; ctx.fill();
+    ctx.fillStyle = C.cell; ctx.font = '9px "JetBrains Mono"'; ctx.textAlign = 'center';
+    ctx.fillText(`C_${t}`, x, cellY - 15);
+    ctx.fillStyle = C.text; ctx.font = '8px "JetBrains Mono"';
+    ctx.fillText(fmtVec(val, 2), x, cellY + 22);
+  }
+
+  ctx.fillStyle = C.cell; ctx.font = 'bold 10px "Space Grotesk"'; ctx.textAlign = 'left';
+  ctx.fillText('Cell State Highway', startX - colW * 0.5, cellY - 28);
+
+  for (let t = 0; t < 3; t++) {
+    const x = startX + t * colW;
+    const isActive = true;
+
+    // Time step panel
+    drawRoundedRect(x - colW*0.38, 90, colW*0.76, 280, 12,
+      hexToRGBA(C.accent, 0.03), hexToRGBA(C.accent, 0.1), 1);
+
+    // Gate indicators (compact)
+    const gateY = 130;
+    const gw = colW * 0.65, gh = 22;
+    const gates = [
+      { label: `f=${fmtVec(fs[t],2)}`, color: C.forget },
+      { label: `i=${fmtVec(is_[t],2)}`, color: C.gateIn },
+      { label: `C̃=${fmtVec(c_tildes[t],2)}`, color: C.candidate },
+      { label: `o=${fmtVec(os[t],2)}`, color: C.gateOut },
+    ];
+    gates.forEach((g, gi) => {
+      const gy = gateY + gi * (gh + 8);
+      drawRoundedRect(x - gw/2, gy - gh/2, gw, gh, 6,
+        hexToRGBA(g.color, 0.08), hexToRGBA(g.color, 0.4), 1);
+      ctx.fillStyle = g.color; ctx.font = '9px "JetBrains Mono"'; ctx.textAlign = 'center';
+      ctx.fillText(g.label, x, gy + 4);
+    });
+
+    // Hidden state
+    const hY = 280;
+    drawRoundedRect(x - gw/2, hY, gw, 30, 8,
+      hexToRGBA(C.hidden, 0.1), C.hidden, 1.5);
+    ctx.fillStyle = C.hidden; ctx.font = '10px "JetBrains Mono"'; ctx.textAlign = 'center';
+    ctx.fillText(`h_${t} = ${fmtVec(hs[t+1], 3)}`, x, hY + 19);
+
+    // Recurrent arrow
+    if (t < 2) {
+      drawArrow(x + gw/2 + 5, hY + 15, startX + (t+1)*colW - gw/2 - 5, hY + 15, C.hidden, true);
+    }
+
+    // Input below
+    const inY = 340;
+    ctx.fillStyle = C.input; ctx.font = 'bold 11px "JetBrains Mono"'; ctx.textAlign = 'center';
+    ctx.fillText(`x_${t}=${fmtVec(X[t],1)}`, x, inY);
+    ctx.fillStyle = C.dim; ctx.font = '10px "DM Sans"';
+    ctx.fillText(words[t], x, inY + 16);
+
+    // Time label
+    ctx.fillStyle = C.text; ctx.font = 'bold 12px "Space Grotesk"'; ctx.textAlign = 'center';
+    ctx.fillText(`t = ${t}`, x, 105);
+  }
+
+  return [];
+}
+
+function drawSummaryScene() {
+  const W = canvas.width / (window.devicePixelRatio || 1);
+  const cx = W / 2;
+
+  const items = [
+    { icon: '🧠', text: 'Cell state: long-term memory highway (gradients flow freely)', color: C.cell },
+    { icon: '🚪', text: 'Forget gate: selectively erase old memories', color: C.forget },
+    { icon: '✏️', text: 'Input gate + candidate: selectively write new memories', color: C.gateIn },
+    { icon: '👁', text: 'Output gate: selectively read from memory', color: C.gateOut },
+    { icon: '🔗', text: 'Key insight: only ⊙ and + on cell state → no vanishing gradients', color: C.accent3 },
+    { icon: '→', text: 'Evolution: RNN → LSTM → GRU (simpler) → Transformer (no recurrence)', color: C.accent },
+  ];
+
+  items.forEach((item, i) => {
+    const y = 22 + i * 62;
+    const cardW = Math.min(480, W - 60);
+
+    drawRoundedRect(cx - cardW/2, y, cardW, 50, 10,
+      hexToRGBA(item.color, 0.06), hexToRGBA(item.color, 0.25), 1);
+    drawRoundedRect(cx - cardW/2, y, 4, 50, [10,0,0,10], item.color, null);
+
+    ctx.font = '16px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = item.color;
+    ctx.fillText(item.icon, cx - cardW/2 + 28, y + 32);
+
+    ctx.fillStyle = C.text; ctx.font = '12px "DM Sans"'; ctx.textAlign = 'left';
+    ctx.fillText(item.text, cx - cardW/2 + 52, y + 30);
+  });
+
+  return [];
+}
+
+// ===== MAIN DRAW =====
+function drawScene() {
+  const W = canvas.width / (window.devicePixelRatio || 1);
+  ctx.clearRect(0, 0, W, CANVAS_H);
+
+  const step = steps[currentStep];
+  switch (step.draw) {
+    case 'why_lstm': return drawWhyLSTM();
+    case 'architecture': return drawArchitectureScene();
+    case 'conveyor': return drawConveyor();
+    case 'params': return drawParamsScene();
+    case 'inputs': return drawInputsScene();
+    case 't0_forget': return drawLSTMStep(0, 'forget');
+    case 't0_input': return drawLSTMStep(0, 'input');
+    case 't0_cell': return drawLSTMStep(0, 'cell');
+    case 't0_output': return drawLSTMStep(0, 'output');
+    case 't1_forget': return drawLSTMStep(1, 'forget');
+    case 't1_input': return drawLSTMStep(1, 'input');
+    case 't1_cell': return drawLSTMStep(1, 'cell');
+    case 't1_output': return drawLSTMStep(1, 'output');
+    case 't2_all': return drawLSTMStep(2, 'all');
+    case 't2_output': return drawLSTMStep(2, 'output');
+    case 'unrolled': return drawUnrolledScene();
+    case 'summary': return drawSummaryScene();
+  }
+  return [];
+}
+
+function draw() {
+  stopAnimation();
+  const paths = drawScene();
+  if (paths && paths.length > 0) {
+    const step = steps[currentStep];
+    let pColor = C.accent2;
+    if (step.draw.includes('forget')) pColor = C.forget;
+    else if (step.draw.includes('input')) pColor = C.gateIn;
+    else if (step.draw.includes('cell')) pColor = C.cell;
+    else if (step.draw.includes('output')) pColor = C.gateOut;
+    spawnParticles(paths, pColor, 3);
+    startAnimation();
+  }
+}
+
+// ===== NAVIGATION =====
+function buildIndicator() {
+  const el = document.getElementById('stepIndicator');
+  el.innerHTML = '';
+  steps.forEach((_, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'step-dot' + (i === currentStep ? ' active' : (i < currentStep ? ' visited' : ''));
+    dot.onclick = () => goToStep(i);
+    el.appendChild(dot);
+  });
+}
+
+function updateUI() {
+  const step = steps[currentStep];
+  document.getElementById('stepNum').textContent = `${currentStep + 1} / ${steps.length}`;
+  document.getElementById('stepTitle').textContent = step.title;
+  document.getElementById('stepSubtitle').textContent = step.subtitle;
+  document.getElementById('mathPanel').innerHTML = `<div class="math-block">${step.math}</div>`;
+  document.getElementById('explanation').innerHTML = step.explanation;
+  document.getElementById('navLabel').textContent = `Step ${currentStep + 1} of ${steps.length}`;
+  document.getElementById('btnPrev').disabled = currentStep === 0;
+  document.getElementById('btnNext').disabled = currentStep === steps.length - 1;
+  document.getElementById('btnNext').innerHTML = currentStep === steps.length - 1 ? 'Done &#10003;' : 'Next &#8594;';
+  // Render LaTeX
+  if (typeof renderMathInElement === 'function') {
+    renderMathInElement(document.getElementById('mathPanel'), {
+      delimiters: [
+        {left: '$$', right: '$$', display: true},
+        {left: '$', right: '$', display: false}
+      ],
+      throwOnError: false
+    });
+  }
+  buildIndicator();
+  draw();
+}
+
+function goToStep(i) { currentStep = Math.max(0, Math.min(steps.length - 1, i)); updateUI(); }
+function nextStep() { goToStep(currentStep + 1); }
+function prevStep() { goToStep(currentStep - 1); }
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); nextStep(); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); prevStep(); }
+});
+
+// Init
+function initApp() {
+  if (typeof renderMathInElement === 'function') { updateUI(); }
+  else { setTimeout(initApp, 100); }
+}
+if (document.readyState === 'complete') { initApp(); }
+else { window.addEventListener('load', initApp); }
+</script>
+</body>
+</html>

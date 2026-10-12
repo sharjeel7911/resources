@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GRU Cell Architecture — Classic Diagram</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #fff; color: #1a1a1a;
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh; padding: 30px 20px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 1.6rem; font-weight: 700; text-align: center; margin-bottom: 6px; color: #111; }
+  .subtitle {
+    text-align: center; font-size: 0.92rem; color: #666;
+    margin-bottom: 24px; max-width: 720px; margin-left: auto; margin-right: auto;
+  }
+  .canvas-wrap {
+    background: #fff; border: 1px solid #ddd; border-radius: 12px;
+    padding: 10px; box-shadow: 0 1px 8px rgba(0,0,0,0.06); overflow-x: auto;
+  }
+  canvas { display: block; margin: 0 auto; }
+
+  .equations {
+    margin-top: 28px; display: grid;
+    grid-template-columns: repeat(3, 1fr); gap: 16px;
+  }
+  @media (max-width: 820px) { .equations { grid-template-columns: 1fr; } }
+  .eq-card {
+    background: #f8f8f8; border: 1px solid #e0e0e0; border-radius: 10px;
+    padding: 16px 18px; position: relative; overflow: hidden;
+  }
+  .eq-card::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; }
+  .eq-card.reset::before  { background: #888; }
+  .eq-card.update::before { background: #555; }
+  .eq-card.cand::before   { background: #333; }
+  .eq-card .eq-title {
+    font-size: 0.82rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.8px; margin-bottom: 8px; color: #333;
+  }
+  .eq-card .eq-body { font-size: 1rem; margin-bottom: 6px; }
+  .eq-card .eq-desc { font-size: 0.82rem; color: #777; line-height: 1.5; }
+  .eq-card .katex { font-size: 1.15em; }
+
+  .compare {
+    margin-top: 28px; background: #f8f8f8; border: 1px solid #e0e0e0;
+    border-radius: 10px; padding: 20px 24px;
+  }
+  .compare h3 { font-size: 0.95rem; font-weight: 700; margin-bottom: 14px; color: #333; }
+  .compare table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .compare th { text-align: left; padding: 8px 12px; border-bottom: 2px solid #ddd; color: #555; font-weight: 600; }
+  .compare td { padding: 8px 12px; border-bottom: 1px solid #eee; color: #444; }
+  .compare tr:last-child td { border-bottom: none; }
+  .compare .highlight { font-weight: 600; color: #222; }
+
+  .legend-row {
+    display: flex; gap: 28px; justify-content: center; flex-wrap: wrap;
+    margin-top: 20px; padding: 14px 20px;
+    background: #fafafa; border: 1px solid #eee; border-radius: 8px;
+    font-size: 0.82rem; color: #555;
+  }
+  .legend-row .leg { display: flex; align-items: center; gap: 7px; }
+  .legend-row .leg .dot { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #ccc; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>GRU: Gated Recurrent Unit</h1>
+  <p class="subtitle">A simplified gating mechanism with only <strong>two gates</strong> (reset & update) and <strong>no separate cell state</strong> — fewer parameters, similar performance to LSTM on many tasks.</p>
+
+  <div class="canvas-wrap">
+    <canvas id="c"></canvas>
+  </div>
+
+  <div class="legend-row">
+    <div class="leg"><div class="dot" style="background:#e8e8e8"></div> Cell body</div>
+    <div class="leg"><div class="dot" style="background:#d5d0c0"></div> Sigmoid gate (σ)</div>
+    <div class="leg"><div class="dot" style="background:#c8c0b0"></div> Tanh layer</div>
+    <div class="leg"><div class="dot" style="background:#fff; border:2px solid #555"></div> Pointwise op</div>
+    <div class="leg"><svg width="28" height="10"><line x1="0" y1="5" x2="28" y2="5" stroke="#333" stroke-width="2"/><polygon points="24,2 28,5 24,8" fill="#333"/></svg> Vector flow</div>
+    <div class="leg"><svg width="28" height="10"><circle cx="5" cy="5" r="4" fill="#c8b8e8" stroke="#777"/></svg> Hidden state</div>
+  </div>
+
+  <div class="equations">
+    <div class="eq-card reset">
+      <div class="eq-title">1. Reset Gate</div>
+      <div class="eq-body">$$r_t = \sigma\big(W_r \cdot [h_{t-1},\, x_t] + b_r\big)$$</div>
+      <div class="eq-desc">Decides <strong>how much past memory to forget</strong> when computing the candidate. When r_t ≈ 0, the candidate ignores h_{t-1} entirely — like starting fresh.</div>
+    </div>
+    <div class="eq-card update">
+      <div class="eq-title">2. Update Gate</div>
+      <div class="eq-body">$$z_t = \sigma\big(W_z \cdot [h_{t-1},\, x_t] + b_z\big)$$</div>
+      <div class="eq-desc">Controls the <strong>balance between old and new</strong>. Acts as both LSTM's forget gate and input gate combined: z_t ≈ 1 means "keep old h", z_t ≈ 0 means "use new candidate".</div>
+    </div>
+    <div class="eq-card cand">
+      <div class="eq-title">3. Candidate + Output</div>
+      <div class="eq-body">$$\tilde{h}_t = \tanh\big(W \cdot [r_t \odot h_{t-1},\, x_t] + b\big)$$
+$$h_t = (1 - z_t) \odot h_{t-1} \;+\; z_t \odot \tilde{h}_t$$</div>
+      <div class="eq-desc">The candidate uses the <strong>reset-filtered</strong> past. Then the update gate <strong>interpolates</strong> between old h and new candidate — a smooth blend.</div>
+    </div>
+  </div>
+
+  <div class="compare">
+    <h3>GRU vs LSTM — Quick Comparison</h3>
+    <table>
+      <tr><th></th><th>LSTM</th><th>GRU</th></tr>
+      <tr><td class="highlight">Gates</td><td>3 (forget, input, output)</td><td>2 (reset, update)</td></tr>
+      <tr><td class="highlight">States</td><td>2 (cell C_t + hidden h_t)</td><td>1 (hidden h_t only)</td></tr>
+      <tr><td class="highlight">Parameters</td><td>4 weight matrices</td><td>3 weight matrices (25% fewer)</td></tr>
+      <tr><td class="highlight">Cell state</td><td>Separate highway</td><td>No — hidden state does everything</td></tr>
+      <tr><td class="highlight">Key idea</td><td>Forget old + add new independently</td><td>Single interpolation: old ↔ new</td></tr>
+      <tr><td class="highlight">Training</td><td>Slightly slower</td><td>Slightly faster (fewer params)</td></tr>
+      <tr><td class="highlight">Performance</td><td colspan="2" style="text-align:center; color:#555;">Similar on most tasks — try both and pick what works</td></tr>
+    </table>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const dpr = window.devicePixelRatio || 1;
+
+const CELL_W = 300;
+const CELL_H = 280;
+const CELL_GAP = 70;
+const CELLS = 3;
+const PAD_X = 60;
+const PAD_TOP = 55;
+const PAD_BOT = 50;
+const TOTAL_W = CELLS * CELL_W + (CELLS - 1) * CELL_GAP + PAD_X * 2;
+const TOTAL_H = CELL_H + PAD_TOP + PAD_BOT + 50;
+
+canvas.width = TOTAL_W * dpr;
+canvas.height = TOTAL_H * dpr;
+canvas.style.width = TOTAL_W + 'px';
+canvas.style.height = TOTAL_H + 'px';
+ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+const COL = {
+  cellFill: '#eef0e4',
+  cellStroke: '#b0b5a0',
+  gateSigmoid: '#d5d0c0',
+  gateTanh: '#c8c0b0',
+  line: '#444',
+  lineLight: '#999',
+  text: '#222',
+  textDim: '#777',
+  nodeH: '#d8cce8',
+  nodeX: '#e0dcd0',
+  op: '#fff',
+  opStroke: '#555',
+};
+
+// ===== Drawing primitives =====
+function arrow(x1, y1, x2, y2, opts={}) {
+  const {color=COL.line, width=1.8, headSize=7, dashed=false} = opts;
+  const dx = x2-x1, dy = y2-y1, len = Math.sqrt(dx*dx+dy*dy);
+  if (len < 1) return;
+  const ux = dx/len, uy = dy/len;
+  const ex = x2 - ux*headSize*0.5, ey = y2 - uy*headSize*0.5;
+  ctx.save();
+  ctx.strokeStyle = color; ctx.lineWidth = width;
+  if (dashed) ctx.setLineDash([5,4]);
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(ex,ey); ctx.stroke();
+  ctx.setLineDash([]);
+  const angle = Math.atan2(dy,dx);
+  ctx.beginPath();
+  ctx.moveTo(x2,y2);
+  ctx.lineTo(x2-headSize*Math.cos(angle-0.38), y2-headSize*Math.sin(angle-0.38));
+  ctx.lineTo(x2-headSize*Math.cos(angle+0.38), y2-headSize*Math.sin(angle+0.38));
+  ctx.closePath(); ctx.fillStyle = color; ctx.fill();
+  ctx.restore();
+}
+
+function line(x1,y1,x2,y2,opts={}) {
+  const {color=COL.line, width=1.8} = opts;
+  ctx.save(); ctx.strokeStyle=color; ctx.lineWidth=width;
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  ctx.restore();
+}
+
+function gateCircle(x, y, r, label, type) {
+  ctx.save();
+  ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2);
+  ctx.fillStyle = type==='sigma' ? COL.gateSigmoid : COL.gateTanh;
+  ctx.fill();
+  ctx.strokeStyle = '#888'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = COL.text;
+  ctx.font = type==='sigma' ? 'bold 13px "JetBrains Mono"' : 'bold 12px "JetBrains Mono"';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(label, x, y);
+  ctx.restore();
+}
+
+function opCircle(x, y, r, symbol) {
+  ctx.save();
+  ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2);
+  ctx.fillStyle = COL.op; ctx.fill();
+  ctx.strokeStyle = COL.opStroke; ctx.lineWidth = 1.8; ctx.stroke();
+  ctx.fillStyle = COL.text;
+  ctx.font = 'bold 14px "JetBrains Mono"';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(symbol, x, y);
+  ctx.restore();
+}
+
+function stateCircle(x, y, r, label, color) {
+  ctx.save();
+  ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2);
+  ctx.fillStyle = color; ctx.fill();
+  ctx.strokeStyle = '#888'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = COL.text;
+  ctx.font = '600 12px "Inter"';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(label, x, y);
+  ctx.restore();
+}
+
+function labelText(x, y, text, opts={}) {
+  const {size=12, weight='600', color=COL.text, align='center', baseline='middle', font='Inter'} = opts;
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.font = `${weight} ${size}px "${font}"`;
+  ctx.textAlign = align; ctx.textBaseline = baseline;
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
+
+function hexToRGBA(hex, a) {
+  hex = hex.replace('#','');
+  return `rgba(${parseInt(hex.substr(0,2),16)},${parseInt(hex.substr(2,2),16)},${parseInt(hex.substr(4,2),16)},${a})`;
+}
+
+// ===== Draw one GRU cell =====
+function drawCell(ox, oy, tIdx, expanded) {
+  const w = CELL_W, h = CELL_H;
+
+  ctx.save();
+  ctx.beginPath(); ctx.roundRect(ox, oy, w, h, 16);
+  ctx.fillStyle = COL.cellFill; ctx.fill();
+  ctx.strokeStyle = COL.cellStroke; ctx.lineWidth = 2; ctx.stroke();
+  ctx.restore();
+
+  const ccx = ox + w/2;
+
+  if (!expanded) {
+    ctx.save();
+    ctx.fillStyle = '#777';
+    ctx.font = 'bold 48px "Inter"';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('A', ccx, oy + h/2);
+    ctx.restore();
+    return;
+  }
+
+  // ===== EXPANDED GRU INTERNAL STRUCTURE =====
+  //
+  // GRU is simpler than LSTM:
+  //
+  //   h_{t-1} ────→ [×](1-z) ──────→ [+] ──────→ h_t
+  //                                     ↑
+  //                                  [×] z * h̃
+  //                                 ↑     ↑
+  //                               [σ]z  [tanh] h̃
+  //                                 ↑   ↑    ↑
+  //                                 |  [×]r  x_t
+  //                                 | ↑   ↑
+  //                               [σ]r  h_{t-1}
+  //                                 ↑
+  //                          [h_{t-1}, x_t]
+
+  const hLineY  = oy + 42;            // hidden state highway
+  const gateY   = oy + h * 0.62;      // gate row center
+  const busY    = oy + h - 25;        // input bus
+
+  // Horizontal positions
+  const xR   = ox + w * 0.20;   // reset gate
+  const xZ   = ox + w * 0.42;   // update gate
+  const xTan = ox + w * 0.62;   // candidate tanh
+  const xMix = ox + w * 0.78;   // mixing point (final add)
+
+  // ===== HIDDEN STATE LINE (top) =====
+  arrow(ox - 8, hLineY, ox + w + 8, hLineY, {color: COL.line, width: 3});
+
+  // ===== OPERATORS ON HIDDEN STATE LINE =====
+  // (1-z) × h_{t-1}
+  opCircle(xZ, hLineY, 13, '\u00d7');
+  // + mixing
+  opCircle(xMix, hLineY, 13, '+');
+
+  // ===== GATES =====
+  const gr = 18;
+  // Reset gate
+  gateCircle(xR, gateY, gr, '\u03c3', 'sigma');
+  // Update gate
+  gateCircle(xZ, gateY, gr, '\u03c3', 'sigma');
+  // Candidate tanh
+  gateCircle(xTan, gateY, gr, 'tanh', 'tanh');
+
+  // ===== CONNECTIONS =====
+
+  // 1) Update gate (z_t) → multiply on h-line
+  //    z_t controls two things:
+  //    a) (1-z_t) × h_{t-1}  → the × on the h-line
+  //    b) z_t × h̃_t          → feeds into +
+  arrow(xZ, gateY - gr, xZ, hLineY + 14, {color: COL.line, width: 1.8});
+  // Label: (1-z)
+  labelText(xZ - 18, (gateY - gr + hLineY + 14) / 2, '1-z', {size: 9, color: COL.textDim, font: 'JetBrains Mono', align: 'right'});
+
+  // 2) z_t × h̃_t multiply node
+  const zmulY = gateY - gr - 25;
+  opCircle((xZ + xTan) / 2 + 5, zmulY, 10, '\u00d7');
+  // z_t → zmul (from top of update gate, go right)
+  const zmulX = (xZ + xTan) / 2 + 5;
+  // line from z gate rightward then up to zmul
+  line(xZ + gr + 2, gateY, zmulX - 5, gateY, {color: COL.line, width: 1.3});
+  arrow(zmulX, gateY - 2, zmulX, zmulY + 11, {color: COL.line, width: 1.5});
+  // Label: z
+  labelText(zmulX + 14, (gateY + zmulY) / 2 + 5, 'z', {size: 9, color: COL.textDim, font: 'JetBrains Mono', align: 'left'});
+
+  // tanh → zmul
+  arrow(xTan, gateY - gr, zmulX + 6, zmulY + 8, {color: COL.line, width: 1.5});
+
+  // zmul → + on h-line
+  arrow(zmulX, zmulY - 10, xMix, hLineY + 14, {color: COL.line, width: 1.8});
+
+  // 3) Reset gate → reset-multiply with h_{t-1}
+  //    r_t ⊙ h_{t-1} feeds into the tanh candidate
+  const rmulX = (xR + xTan) / 2;
+  const rmulY = gateY + gr + 22;
+  opCircle(rmulX, rmulY, 10, '\u00d7');
+  // reset gate → rmul
+  arrow(xR, gateY + gr, rmulX - 6, rmulY - 8, {color: COL.line, width: 1.5});
+  // h_{t-1} from left → rmul (from bus line, routed)
+  arrow(ox + 12, busY, xR, busY, {color: COL.lineLight, width: 1.3});
+  line(xR, busY, xR, rmulY + 12, {color: COL.lineLight, width: 1.3});
+  arrow(xR, rmulY + 6, rmulX - 12, rmulY, {color: COL.lineLight, width: 1.3});
+  // label
+  labelText(rmulX, rmulY + 18, 'r \u2299 h_{t-1}', {size: 8, color: COL.textDim, font: 'JetBrains Mono'});
+
+  // rmul → tanh candidate
+  arrow(rmulX + 12, rmulY, xTan, gateY + gr, {color: COL.line, width: 1.5});
+
+  // ===== INPUT BUS =====
+  ctx.save();
+  ctx.strokeStyle = COL.lineLight; ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.moveTo(ox + 12, busY); ctx.lineTo(ox + w - 12, busY);
+  ctx.stroke(); ctx.restore();
+
+  // Taps from bus to gates
+  [xR, xZ].forEach(gx => {
+    arrow(gx, busY - 2, gx, gateY + gr + 1, {color: COL.lineLight, width: 1.3});
+  });
+  // x_t also feeds tanh directly (alongside r⊙h)
+  arrow(xTan, busY - 2, xTan, gateY + gr + 1, {color: COL.lineLight, width: 1.3});
+
+  // Bus ← x_t from below
+  arrow(ccx, oy + h + 6, ccx, busY + 1, {color: COL.line, width: 2});
+  // Bus ← h_{t-1} from left
+  arrow(ox - 6, busY, ox + 10, busY, {color: COL.line, width: 2});
+
+  // ===== h_t OUTPUT: from + up through top, horizontal to center, then up =====
+  const topExit = oy + 6;
+  line(xMix, hLineY - 13, xMix, topExit, {color: COL.line, width: 2});
+  line(xMix, topExit, ccx, topExit, {color: COL.line, width: 2});
+  arrow(ccx, topExit, ccx, oy - 5, {color: COL.line, width: 2});
+
+  // ===== LABELS =====
+  labelText(xR, gateY + gr + 14, 'reset', {size: 9, color: COL.textDim});
+  labelText(xZ, gateY + gr + 14, 'update', {size: 9, color: COL.textDim});
+  labelText(xTan, gateY - gr - 10, 'cand.', {size: 9, color: COL.textDim});
+
+  labelText(xZ, hLineY - 20, 'keep old?', {size: 8, color: '#aaa', font: 'Inter'});
+  labelText(xMix, hLineY - 20, 'blend', {size: 8, color: '#aaa', font: 'Inter'});
+}
+
+// ===== DRAW FULL DIAGRAM =====
+function drawAll() {
+  ctx.clearRect(0, 0, TOTAL_W, TOTAL_H);
+
+  const labels = [
+    { sub: 't\u22121', xLabel: 'x_{t-1}', hOutLabel: 'h_{t-1}' },
+    { sub: 't',       xLabel: 'x_t',     hOutLabel: 'h_t' },
+    { sub: 't+1',     xLabel: 'x_{t+1}', hOutLabel: 'h_{t+1}' },
+  ];
+
+  const oy = PAD_TOP + 20;
+  const hLineY = oy + 42;
+  const busY = oy + CELL_H - 25;
+
+  for (let i = 0; i < CELLS; i++) {
+    const ox = PAD_X + i * (CELL_W + CELL_GAP);
+    const ccx = ox + CELL_W / 2;
+    const expanded = (i === 1);
+
+    drawCell(ox, oy, i, expanded);
+
+    // x_t below
+    const xCircY = oy + CELL_H + 32;
+    stateCircle(ccx, xCircY, 16, labels[i].xLabel, COL.nodeX);
+    arrow(ccx, xCircY - 16, ccx, oy + CELL_H + 2, {color: COL.line, width: 2});
+    labelText(ccx, xCircY + 28, 'time ' + labels[i].sub, {size: 11, color: COL.textDim, weight: '500'});
+
+    // h_t above
+    const hCircY = oy - 26;
+    stateCircle(ccx, hCircY, 16, labels[i].hOutLabel, COL.nodeH);
+    if (!expanded) {
+      arrow(ccx, oy - 2, ccx, hCircY + 16, {color: COL.line, width: 2});
+    }
+
+    // Inter-cell connections
+    if (i < CELLS - 1) {
+      const nextOx = PAD_X + (i+1) * (CELL_W + CELL_GAP);
+      arrow(ox + CELL_W + 2, hLineY, nextOx - 2, hLineY, {color: COL.line, width: 3});
+      arrow(ox + CELL_W + 2, busY, nextOx - 2, busY, {color: COL.line, width: 2});
+    }
+
+    if (i === 0) {
+      arrow(PAD_X - 45, hLineY, ox - 2, hLineY, {color: COL.line, width: 3});
+      arrow(PAD_X - 45, busY, ox - 2, busY, {color: COL.line, width: 2});
+      labelText(PAD_X - 48, hLineY, 'h_{t-2}', {size: 10, color: '#999', align: 'right', font: 'JetBrains Mono'});
+    }
+    if (i === CELLS - 1) {
+      arrow(ox + CELL_W + 2, hLineY, ox + CELL_W + 50, hLineY, {color: COL.line, width: 3});
+      arrow(ox + CELL_W + 2, busY, ox + CELL_W + 50, busY, {color: COL.line, width: 2});
+    }
+  }
+
+  // Top annotation
+  const topAnnotY = PAD_TOP - 5;
+  const midCell = PAD_X + 1 * (CELL_W + CELL_GAP);
+  labelText(midCell + CELL_W/2, topAnnotY, 'Hidden State  h_t  (GRU has no separate cell state)', {size: 12, color: '#888', weight: '600'});
+  arrow(midCell + CELL_W/2 - 120, topAnnotY + 12, midCell + CELL_W/2 + 120, topAnnotY + 12, {color: '#ccc', width: 1.5, headSize: 5});
+
+  // Bottom annotation
+  labelText(TOTAL_W / 2, TOTAL_H - 8, 'Each GRU module "A" has two sigmoid gates (σ) and one tanh layer — simpler than LSTM\'s four layers', {size: 11, color: '#aaa', weight: '500'});
+}
+
+drawAll();
+
+function initKatex() {
+  if (typeof renderMathInElement === 'function') {
+    renderMathInElement(document.body, {
+      delimiters: [{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],
+      throwOnError: false
+    });
+  } else setTimeout(initKatex, 100);
+}
+window.addEventListener('load', initKatex);
+</script>
+</body>
+</html>
